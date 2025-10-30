@@ -10,7 +10,7 @@ import time
 from datetime import datetime, timedelta
 import json
 import asyncio
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Union
 from collections import defaultdict
 import hashlib
 
@@ -129,10 +129,92 @@ SUPPORTED_SERVICES = [
     "shorteners-and-direct", "shorter.me", "socialwolvez.com", "sub2get.com",
     "sub2unlock.net", "sub4unlock.com", "subfinal", "t.co", "t.ly", "tiny.cc",
     "tinylink.onl", "tinyurl.com", "tpi.li", "unlocknow.net", "v.gd",
-    "work-ink", "ytsubme", "ace-bypass.com"
+    "work-ink", "ytsubme", "ace-bypass.com", "delta", "krnl", "platoboost"
 ]
 
+SERVICE_EMOJIS = {
+    "codex": "🔷",
+    "trigon": "🔺",
+    "rekonise": "🔍",
+    "linkvertise": "🔗",
+    "delta": "🔺",
+    "krnl": "⚡",
+    "platoboost": "🚀",
+    "paster-so": "📋",
+    "cuttlinks": "✂️",
+    "boost-ink-and-bst-gg": "🚀",
+    "keyguardian": "🔐",
+    "bstshrt": "⚡",
+    "nicuse-getkey": "🔑",
+    "adfoc.us": "📢",
+    "bit.do": "🔗",
+    "bit.ly": "🔗",
+    "blox-script": "🎮",
+    "boost.ink": "🚀",
+    "cl.gy": "🔗",
+    "cuty-cuttlinks": "✂️",
+    "getpolsec": "🔒",
+    "goo.gl": "🔗",
+    "is.gd": "🔗",
+    "ldnesfspublic": "📁",
+    "link-hub.net": "🌐",
+    "link-unlock-complete": "🔓",
+    "link4m.com": "🔗",
+    "linkunlock": "🔓",
+    "linkunlocker.com": "🔓",
+    "lockr": "🔒",
+    "mboost": "🚀",
+    "mediafire": "📁",
+    "overdrivehub": "🎮",
+    "paste-drop.com": "📋",
+    "pastebin.com": "📋",
+    "pastes_io": "📋",
+    "quartyz": "💎",
+    "rebrand.ly": "🔗",
+    "rekonise.com": "🔍",
+    "rentry.co": "📝",
+    "rinku-pro": "🔗",
+    "rkns.link": "🔗",
+    "shorteners-and-direct": "🔗",
+    "shorter.me": "🔗",
+    "socialwolvez.com": "🐺",
+    "sub2get.com": "📺",
+    "sub2unlock.net": "🔓",
+    "sub4unlock.com": "🔓",
+    "subfinal": "📺",
+    "t.co": "🔗",
+    "t.ly": "🔗",
+    "tiny.cc": "🔗",
+    "tinylink.onl": "🔗",
+    "tinyurl.com": "🔗",
+    "tpi.li": "🔗",
+    "unlocknow.net": "🔓",
+    "v.gd": "🔗",
+    "work-ink": "💼",
+    "ytsubme": "📺",
+    "ace-bypass.com": "🎯"
+}
+
+SERVICE_STATUS_FILE = 'service_status.json'
+
+def load_service_status():
+    try:
+        if os.path.exists(SERVICE_STATUS_FILE):
+            with open(SERVICE_STATUS_FILE, 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"Error loading service status: {e}")
+    return {service: "online" for service in SUPPORTED_SERVICES}
+
+def save_service_status(status):
+    try:
+        with open(SERVICE_STATUS_FILE, 'w') as f:
+            json.dump(status, f, indent=2)
+    except Exception as e:
+        print(f"Error saving service status: {e}")
+
 service_preferences = load_service_preferences()
+service_status = load_service_status()
 
 def contains_junkie(text: str) -> bool:
     if not text:
@@ -221,6 +303,13 @@ def get_service_name(url: str) -> str:
     try:
         parsed = urlparse(url.lower())
         domain = parsed.netloc.replace('www.', '')
+        
+        if 'platoboost' in domain or 'gateway' in domain:
+            return 'platoboost'
+        if 'delta' in domain:
+            return 'delta'
+        if 'krnl' in domain:
+            return 'krnl'
 
         for service in SUPPORTED_SERVICES:
             if service in domain or domain in service:
@@ -229,7 +318,10 @@ def get_service_name(url: str) -> str:
     except:
         return "unknown"
 
-async def log_bypass_to_channel(user: discord.User, guild: discord.Guild, link: str, time_taken: float, result_type: str):
+def get_service_emoji(service: str) -> str:
+    return SERVICE_EMOJIS.get(service, "🔗")
+
+async def log_bypass_to_channel(user: Union[discord.User, discord.Member], guild: discord.Guild, link: str, time_taken: float, result_type: str):
     global log_channels
     try:
         if guild.id in log_channels:
@@ -499,13 +591,21 @@ class BypassModal(Modal):
 
     async def on_submit(self, interaction: discord.Interaction):
         link_to_bypass = self.link_input.value.strip()
-
+        
+        service_name = get_service_name(link_to_bypass)
+        service_emoji = get_service_emoji(service_name)
+        
+        start_time = time.time()
+        
+        loading_embed = discord.Embed(
+            title=f"{service_emoji} Bypassing {service_name.title()}",
+            description=f"⏳ **Processing your link...**\n\n`{link_to_bypass[:80]}{'...' if len(link_to_bypass) > 80 else ''}`\n\n🕐 **Elapsed:** 0.0s",
+            color=discord.Color.blue()
+        )
+        loading_embed.set_footer(text="Bypass Bot • Hang tight!")
+        
         await interaction.response.send_message(
-            embed=discord.Embed(
-                title="⏳ Processing...",
-                description=f"Bypassing link...\n`{link_to_bypass[:100]}`",
-                color=discord.Color.blue()
-            ).set_footer(text="Bypass Bot"),
+            embed=loading_embed,
             ephemeral=True
         )
 
@@ -518,18 +618,23 @@ class BypassModal(Modal):
                 ).set_footer(text="Bypass Bot")
             )
             return
-
-        if not is_supported_service(link_to_bypass):
-            await interaction.edit_original_response(
-                embed=discord.Embed(
-                    title="⚠️ Unsupported Service",
-                    description=f"This link may not be from a supported service.\n\nUse `/supported` to view all supported services.\n\n🔍 Attempting bypass anyway...",
-                    color=discord.Color.orange()
-                ).set_footer(text="Bypass Bot")
-            )
-            await asyncio.sleep(2)
-
-        result = await bypass_link(link_to_bypass)
+        
+        async def update_elapsed_time():
+            for i in range(30):
+                await asyncio.sleep(0.5)
+                elapsed = round(time.time() - start_time, 1)
+                loading_embed.description = f"⏳ **Processing your link...**\n\n`{link_to_bypass[:80]}{'...' if len(link_to_bypass) > 80 else ''}`\n\n🕐 **Elapsed:** {elapsed}s"
+                try:
+                    await interaction.edit_original_response(embed=loading_embed)
+                except:
+                    break
+        
+        timer_task = asyncio.create_task(update_elapsed_time())
+        
+        try:
+            result = await bypass_link(link_to_bypass)
+        finally:
+            timer_task.cancel()
 
         if result['success']:
             if interaction.guild:
@@ -625,13 +730,21 @@ class PanelBypassModal(Modal):
 
     async def on_submit(self, interaction: discord.Interaction):
         link_to_bypass = self.link_input.value.strip()
-
+        
+        service_name = get_service_name(link_to_bypass)
+        service_emoji = get_service_emoji(service_name)
+        
+        start_time = time.time()
+        
+        loading_embed = discord.Embed(
+            title=f"{service_emoji} Bypassing {service_name.title()}",
+            description=f"⏳ **Processing your link...**\n\n`{link_to_bypass[:80]}{'...' if len(link_to_bypass) > 80 else ''}`\n\n🕐 **Elapsed:** 0.0s",
+            color=discord.Color.blue()
+        )
+        loading_embed.set_footer(text="Bypass Bot • Hang tight!")
+        
         await interaction.response.send_message(
-            embed=discord.Embed(
-                title="⏳ Processing...",
-                description=f"Bypassing link...\n`{link_to_bypass[:100]}`",
-                color=discord.Color.blue()
-            ).set_footer(text="Bypass Bot"),
+            embed=loading_embed,
             ephemeral=True
         )
 
@@ -644,18 +757,23 @@ class PanelBypassModal(Modal):
                 ).set_footer(text="Bypass Bot")
             )
             return
-
-        if not is_supported_service(link_to_bypass):
-            await interaction.edit_original_response(
-                embed=discord.Embed(
-                    title="⚠️ Unsupported Service",
-                    description=f"This link may not be from a supported service.\n\nUse `/supported` to view all supported services.\n\n🔍 Attempting bypass anyway...",
-                    color=discord.Color.orange()
-                ).set_footer(text="Bypass Bot")
-            )
-            await asyncio.sleep(2)
-
-        result = await bypass_link(link_to_bypass)
+        
+        async def update_elapsed_time():
+            for i in range(30):
+                await asyncio.sleep(0.5)
+                elapsed = round(time.time() - start_time, 1)
+                loading_embed.description = f"⏳ **Processing your link...**\n\n`{link_to_bypass[:80]}{'...' if len(link_to_bypass) > 80 else ''}`\n\n🕐 **Elapsed:** {elapsed}s"
+                try:
+                    await interaction.edit_original_response(embed=loading_embed)
+                except:
+                    break
+        
+        timer_task = asyncio.create_task(update_elapsed_time())
+        
+        try:
+            result = await bypass_link(link_to_bypass)
+        finally:
+            timer_task.cancel()
 
         if result['success']:
             if interaction.guild:
@@ -769,7 +887,8 @@ class SayModal(Modal):
             ephemeral=True
         )
 
-        await interaction.channel.send(message_content)
+        if interaction.channel and isinstance(interaction.channel, (discord.TextChannel, discord.Thread)):
+            await interaction.channel.send(message_content)
 
 class EmbedModal(Modal):
     title_input = TextInput(
@@ -827,7 +946,8 @@ class EmbedModal(Modal):
             ephemeral=True
         )
 
-        await interaction.channel.send(embed=embed)
+        if interaction.channel and isinstance(interaction.channel, (discord.TextChannel, discord.Thread)):
+            await interaction.channel.send(embed=embed)
 
 class ConfigModal(Modal):
     bypass_api_key_input = TextInput(
@@ -1093,7 +1213,7 @@ async def bypass_command(interaction: discord.Interaction):
 
 @bot.tree.command(name="say", description="[ADMIN] Make the bot say a message")
 async def say_command(interaction: discord.Interaction):
-    if not interaction.user.guild_permissions.administrator:
+    if not isinstance(interaction.user, discord.Member) or not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message(
             embed=discord.Embed(
                 title="❌ Permission Denied",
@@ -1108,7 +1228,7 @@ async def say_command(interaction: discord.Interaction):
 
 @bot.tree.command(name="embed", description="[ADMIN] Create a custom embed message")
 async def embed_command(interaction: discord.Interaction):
-    if not interaction.user.guild_permissions.administrator:
+    if not isinstance(interaction.user, discord.Member) or not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message(
             embed=discord.Embed(
                 title="❌ Permission Denied",
@@ -1237,9 +1357,121 @@ async def stats_command(interaction: discord.Interaction):
     embed.set_footer(text="Bypass Bot | Statistics")
     await interaction.response.send_message(embed=embed)
 
+@bot.tree.command(name="status", description="View service status for all supported games/services")
+async def status_command(interaction: discord.Interaction):
+    online_services = []
+    offline_services = []
+    
+    for service in SUPPORTED_SERVICES:
+        status = service_status.get(service, "online")
+        emoji = get_service_emoji(service)
+        status_indicator = "🟢" if status == "online" else "🔴"
+        
+        if status == "online":
+            online_services.append(f"{status_indicator} {emoji} `{service}`")
+        else:
+            offline_services.append(f"{status_indicator} {emoji} `{service}`")
+    
+    online_count = len(online_services)
+    offline_count = len(offline_services)
+    total_count = len(SUPPORTED_SERVICES)
+    uptime_percentage = (online_count / total_count * 100) if total_count > 0 else 0
+    
+    online_text = ""
+    if online_services:
+        chunks = []
+        for i in range(0, len(online_services), 3):
+            chunk = online_services[i:i+3]
+            chunks.append(" • ".join(chunk))
+        online_text = "\n".join(chunks)
+    else:
+        online_text = "*No services online*"
+    
+    offline_text = ""
+    if offline_services:
+        chunks = []
+        for i in range(0, len(offline_services), 3):
+            chunk = offline_services[i:i+3]
+            chunks.append(" • ".join(chunk))
+        offline_text = "\n\n**⚠️ Offline Services:**\n" + "\n".join(chunks)
+    
+    description = f"**📊 Overall Status:** {uptime_percentage:.1f}% Uptime ({online_count}/{total_count} services)\n**🕒 Last Updated:** <t:{int(time.time())}:R>\n\n**✅ Online Services:**\n{online_text}{offline_text}"
+    
+    if len(description) > 4096:
+        description = f"**📊 Overall Status:** {uptime_percentage:.1f}% Uptime ({online_count}/{total_count} services)\n**🕒 Last Updated:** <t:{int(time.time())}:R>\n\n**✅ Online:** {online_count} services\n**⚠️ Offline:** {offline_count} services\n\n*Use `/supported` to view all service names.*"
+    
+    embed = discord.Embed(
+        title="🎮 Service Status Dashboard",
+        description=description,
+        color=discord.Color.green() if uptime_percentage >= 90 else discord.Color.orange() if uptime_percentage >= 50 else discord.Color.red()
+    )
+    
+    embed.set_footer(text="Bypass Bot • Service Status")
+    embed.timestamp = datetime.utcnow()
+    
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="setstatus", description="[OWNER] Change service status")
+@app_commands.describe(
+    service="Service name to update",
+    status="New status (online/offline)"
+)
+async def setstatus_command(interaction: discord.Interaction, service: str, status: str):
+    if interaction.user.id != BOT_OWNER_ID:
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Access Denied",
+                description="This command is only available to the bot owner.",
+                color=discord.Color.red()
+            ),
+            ephemeral=True
+        )
+        return
+    
+    service = service.lower()
+    status = status.lower()
+    
+    if service not in SUPPORTED_SERVICES:
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Invalid Service",
+                description=f"Service `{service}` not found in supported services list.\n\nUse `/supported` to view all services.",
+                color=discord.Color.red()
+            ),
+            ephemeral=True
+        )
+        return
+    
+    if status not in ["online", "offline"]:
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Invalid Status",
+                description="Status must be either `online` or `offline`.",
+                color=discord.Color.red()
+            ),
+            ephemeral=True
+        )
+        return
+    
+    global service_status
+    service_status[service] = status
+    save_service_status(service_status)
+    
+    emoji = get_service_emoji(service)
+    status_indicator = "🟢" if status == "online" else "🔴"
+    
+    await interaction.response.send_message(
+        embed=discord.Embed(
+            title="✅ Status Updated",
+            description=f"{status_indicator} {emoji} **{service}** is now marked as **{status}**",
+            color=discord.Color.green()
+        ),
+        ephemeral=True
+    )
+
 @bot.tree.command(name="panel", description="[ADMIN] Create a bypass panel with a button")
 async def panel_command(interaction: discord.Interaction):
-    if not interaction.user.guild_permissions.administrator:
+    if not isinstance(interaction.user, discord.Member) or not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message(
             embed=discord.Embed(
                 title="❌ Permission Denied",
@@ -1271,12 +1503,13 @@ async def panel_command(interaction: discord.Interaction):
         ephemeral=True
     )
 
-    await interaction.channel.send(embed=panel_embed, view=view)
+    if interaction.channel and isinstance(interaction.channel, (discord.TextChannel, discord.Thread)):
+        await interaction.channel.send(embed=panel_embed, view=view)
 
 @bot.tree.command(name="autobypass", description="Enable auto-bypass in a channel")
 @app_commands.describe(channel="The channel to enable autobypass in")
 async def autobypass_command(interaction: discord.Interaction, channel: discord.TextChannel):
-    if not interaction.user.guild_permissions.manage_channels:
+    if not isinstance(interaction.user, discord.Member) or not interaction.user.guild_permissions.manage_channels:
         await interaction.response.send_message(
             embed=discord.Embed(
                 title="❌ Permission Denied",
@@ -1287,6 +1520,9 @@ async def autobypass_command(interaction: discord.Interaction, channel: discord.
         )
         return
 
+    if not interaction.guild:
+        return
+    
     global autobypass_channels
     autobypass_channels[interaction.guild.id] = channel.id
     save_autobypass_channels(autobypass_channels)
@@ -1302,7 +1538,7 @@ async def autobypass_command(interaction: discord.Interaction, channel: discord.
 
 @bot.tree.command(name="disableautobypass", description="Disable auto-bypass in your server")
 async def disableautobypass_command(interaction: discord.Interaction):
-    if not interaction.user.guild_permissions.manage_channels:
+    if not isinstance(interaction.user, discord.Member) or not interaction.user.guild_permissions.manage_channels:
         await interaction.response.send_message(
             embed=discord.Embed(
                 title="❌ Permission Denied",
@@ -1311,6 +1547,9 @@ async def disableautobypass_command(interaction: discord.Interaction):
             ).set_footer(text="Bypass Bot"),
             ephemeral=True
         )
+        return
+
+    if not interaction.guild:
         return
 
     global autobypass_channels
@@ -1348,6 +1587,9 @@ async def setlogs_command(interaction: discord.Interaction, channel: discord.Tex
             ),
             ephemeral=True
         )
+        return
+
+    if not interaction.guild:
         return
 
     global log_channels
@@ -1611,7 +1853,7 @@ class DMModal(Modal):
 @bot.tree.command(name="purge", description="[ADMIN] Delete a specified number of messages")
 @app_commands.describe(amount="Number of messages to delete (1-100)")
 async def purge_command(interaction: discord.Interaction, amount: int):
-    if not interaction.user.guild_permissions.manage_messages:
+    if not isinstance(interaction.user, discord.Member) or not interaction.user.guild_permissions.manage_messages:
         await interaction.response.send_message(
             embed=discord.Embed(
                 title="❌ Permission Denied",
@@ -1627,6 +1869,17 @@ async def purge_command(interaction: discord.Interaction, amount: int):
             embed=discord.Embed(
                 title="❌ Invalid Amount",
                 description="Please specify a number between 1 and 100.",
+                color=discord.Color.red()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+        return
+
+    if not interaction.channel or not isinstance(interaction.channel, discord.TextChannel):
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Invalid Channel",
+                description="This command can only be used in text channels.",
                 color=discord.Color.red()
             ).set_footer(text="Bypass Bot"),
             ephemeral=True
@@ -1671,7 +1924,7 @@ async def purge_command(interaction: discord.Interaction, amount: int):
     reason="Reason for the ban (optional)"
 )
 async def ban_command(interaction: discord.Interaction, user: discord.Member, reason: Optional[str] = None):
-    if not interaction.user.guild_permissions.ban_members:
+    if not isinstance(interaction.user, discord.Member) or not interaction.user.guild_permissions.ban_members:
         await interaction.response.send_message(
             embed=discord.Embed(
                 title="❌ Permission Denied",
@@ -1706,8 +1959,11 @@ async def ban_command(interaction: discord.Interaction, user: discord.Member, re
 
     ban_reason = reason or "No reason provided"
 
+    if not interaction.guild:
+        return
+
     try:
-        await user.ban(reason=f"Banned by {interaction.user.name} - {ban_reason}")
+        await user.ban(reason=f"Banned by {interaction.user.name if interaction.user else 'Unknown'} - {ban_reason}")
 
         await interaction.response.send_message(
             embed=discord.Embed(
@@ -1755,7 +2011,7 @@ async def ban_command(interaction: discord.Interaction, user: discord.Member, re
     reason="Reason for the timeout (optional)"
 )
 async def timeout_command(interaction: discord.Interaction, user: discord.Member, duration: int, reason: Optional[str] = None):
-    if not interaction.user.guild_permissions.moderate_members:
+    if not isinstance(interaction.user, discord.Member) or not interaction.user.guild_permissions.moderate_members:
         await interaction.response.send_message(
             embed=discord.Embed(
                 title="❌ Permission Denied",
@@ -1802,8 +2058,11 @@ async def timeout_command(interaction: discord.Interaction, user: discord.Member
     timeout_reason = reason or "No reason provided"
     timeout_duration = timedelta(minutes=duration)
 
+    if not interaction.guild:
+        return
+
     try:
-        await user.timeout(timeout_duration, reason=f"Timed out by {interaction.user.name} - {timeout_reason}")
+        await user.timeout(timeout_duration, reason=f"Timed out by {interaction.user.name if interaction.user else 'Unknown'} - {timeout_reason}")
 
         duration_text = f"{duration} minute(s)"
         if duration >= 1440:
@@ -1925,6 +2184,9 @@ async def on_message(message: discord.Message):
             detected_link = detect_url(message.content)
 
             if detected_link:
+                service_name = get_service_name(detected_link)
+                service_emoji = get_service_emoji(service_name)
+                
                 if contains_junkie(detected_link):
                     try:
                         await message.delete()
@@ -1942,21 +2204,32 @@ async def on_message(message: discord.Message):
                 result = await bypass_link(detected_link)
 
                 if result['success']:
+                    if message.guild:
+                        await log_bypass_to_channel(
+                            message.author,
+                            message.guild,
+                            detected_link,
+                            result['time_taken'],
+                            result['type']
+                        )
+                    
                     try:
                         await message.delete()
                         await message.channel.send(
                             embed=discord.Embed(
-                                description=f"✅ {message.author.mention} - Check your DMs for the bypass result!",
+                                description=f"{service_emoji} {message.author.mention} - **{service_name.title()}** link bypassed! Check your DMs!",
                                 color=discord.Color.green()
-                            ).set_footer(text="Bypass Bot"),
+                            ).set_footer(text="Bypass Bot • Auto-Bypass"),
                             delete_after=10
                         )
+
+                        cache_indicator = "⚡ From Cache" if result.get('from_cache') else "✨ Fresh Result"
 
                         if result['type'] == 'loadstring':
                             loadstring = result['result']
                             embed = discord.Embed(
-                                title="✅ Auto-Bypass: Loadstring Retrieved",
-                                description=f"**Original Link:**\n`{detected_link[:100]}`\n\n⏱️ **Time Taken:** {result['time_taken']}s",
+                                title=f"{service_emoji} Auto-Bypass: {service_name.title()} Loadstring",
+                                description=f"**Original Link:**\n`{detected_link[:100]}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}",
                                 color=discord.Color.green()
                             )
 
@@ -1983,8 +2256,8 @@ async def on_message(message: discord.Message):
                         elif result['type'] == 'url':
                             bypassed_url = result['result']
                             embed = discord.Embed(
-                                title="✅ Auto-Bypass: Link Bypassed",
-                                description=f"**Original Link:**\n`{detected_link[:100]}`\n\n**Bypassed Link:**\n`{bypassed_url}`\n\n⏱️ **Time Taken:** {result['time_taken']}s",
+                                title=f"{service_emoji} Auto-Bypass: {service_name.title()} Link",
+                                description=f"**Original Link:**\n`{detected_link[:100]}`\n\n**Bypassed Link:**\n`{bypassed_url}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}",
                                 color=discord.Color.green()
                             )
                             embed.set_footer(text="Bypass Bot | Auto-Bypass")
