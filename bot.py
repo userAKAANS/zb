@@ -923,6 +923,105 @@ class BypassPanelView(View):
     async def bypass_button_callback(self, interaction: discord.Interaction):
         await interaction.response.send_modal(PanelBypassModal())
 
+class ServiceToggleView(View):
+    def __init__(self, services_per_page: int = 10):
+        super().__init__(timeout=300)
+        self.services_per_page = services_per_page
+        self.total_services = len(SUPPORTED_SERVICES)
+        self.total_pages = (self.total_services + services_per_page - 1) // services_per_page
+        self.current_page = 0
+        
+        self.first_button = Button(label="⏮️", style=discord.ButtonStyle.secondary, disabled=True, row=3)
+        self.prev_button = Button(label="◀️", style=discord.ButtonStyle.secondary, disabled=True, row=3)
+        self.page_info = Button(label="Page 1", style=discord.ButtonStyle.secondary, disabled=True, row=3)
+        self.next_button = Button(label="▶️", style=discord.ButtonStyle.secondary, disabled=False, row=3)
+        self.last_button = Button(label="⏭️", style=discord.ButtonStyle.secondary, disabled=False, row=3)
+        
+        self.first_button.callback = self.first_page
+        self.prev_button.callback = self.previous_page
+        self.next_button.callback = self.next_page
+        self.last_button.callback = self.last_page
+        
+        self.refresh_buttons()
+    
+    def refresh_buttons(self):
+        self.clear_items()
+        
+        start_idx = self.current_page * self.services_per_page
+        end_idx = min(start_idx + self.services_per_page, self.total_services)
+        services_list = SUPPORTED_SERVICES[start_idx:end_idx]
+        
+        for i, service in enumerate(services_list):
+            is_enabled = service_preferences.get(service, True)
+            button = Button(
+                label=f"{'✅' if is_enabled else '❌'} {service}",
+                style=discord.ButtonStyle.success if is_enabled else discord.ButtonStyle.danger,
+                custom_id=f"toggle_{service}_{i}",
+                row=i // 5
+            )
+            button.callback = self.create_toggle_callback(service)
+            self.add_item(button)
+        
+        self.add_item(self.first_button)
+        self.add_item(self.prev_button)
+        self.page_info.label = f"Page {self.current_page + 1}/{self.total_pages}"
+        self.add_item(self.page_info)
+        self.add_item(self.next_button)
+        self.add_item(self.last_button)
+    
+    def create_toggle_callback(self, service: str):
+        async def callback(interaction: discord.Interaction):
+            global service_preferences
+            service_preferences[service] = not service_preferences.get(service, True)
+            save_service_preferences(service_preferences)
+            self.refresh_buttons()
+            await interaction.response.edit_message(embed=self.create_embed(), view=self)
+        return callback
+    
+    def create_embed(self) -> discord.Embed:
+        start_idx = self.current_page * self.services_per_page
+        end_idx = min(start_idx + self.services_per_page, self.total_services)
+        enabled_count = sum(1 for s in SUPPORTED_SERVICES if service_preferences.get(s, True))
+        
+        embed = discord.Embed(
+            title="🔧 Service Preferences",
+            description=f"Toggle individual bypass services on/off.\n\n**Enabled:** {enabled_count}/{self.total_services} services\n\nClick a service to toggle it.",
+            color=discord.Color.blue()
+        )
+        
+        embed.set_footer(text=f"Page {self.current_page + 1} of {self.total_pages} | Services {start_idx + 1}-{end_idx}")
+        return embed
+    
+    def update_buttons(self):
+        self.first_button.disabled = self.current_page == 0
+        self.prev_button.disabled = self.current_page == 0
+        self.next_button.disabled = self.current_page >= self.total_pages - 1
+        self.last_button.disabled = self.current_page >= self.total_pages - 1
+    
+    async def first_page(self, interaction: discord.Interaction):
+        self.current_page = 0
+        self.update_buttons()
+        self.refresh_buttons()
+        await interaction.response.edit_message(embed=self.create_embed(), view=self)
+    
+    async def previous_page(self, interaction: discord.Interaction):
+        self.current_page = max(0, self.current_page - 1)
+        self.update_buttons()
+        self.refresh_buttons()
+        await interaction.response.edit_message(embed=self.create_embed(), view=self)
+    
+    async def next_page(self, interaction: discord.Interaction):
+        self.current_page = min(self.total_pages - 1, self.current_page + 1)
+        self.update_buttons()
+        self.refresh_buttons()
+        await interaction.response.edit_message(embed=self.create_embed(), view=self)
+    
+    async def last_page(self, interaction: discord.Interaction):
+        self.current_page = self.total_pages - 1
+        self.update_buttons()
+        self.refresh_buttons()
+        await interaction.response.edit_message(embed=self.create_embed(), view=self)
+
 class BypassBot(discord.Client):
     def __init__(self):
         intents = discord.Intents.default()
