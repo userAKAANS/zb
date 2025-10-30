@@ -109,7 +109,6 @@ def save_service_preferences(preferences):
 autobypass_channels = load_autobypass_channels()
 bypass_stats = load_stats()
 log_channels = load_log_channels()
-service_preferences = load_service_preferences()
 
 ai_service = AIService(OPENAI_API_KEY) if OPENAI_API_KEY else None
 cache_manager = CacheManager(ttl_minutes=30)
@@ -131,6 +130,8 @@ SUPPORTED_SERVICES = [
     "tinylink.onl", "tinyurl.com", "tpi.li", "unlocknow.net", "v.gd",
     "work-ink", "ytsubme", "ace-bypass.com"
 ]
+
+service_preferences = load_service_preferences()
 
 def detect_url(text: str) -> Optional[str]:
     def extract_markdown_links(text):
