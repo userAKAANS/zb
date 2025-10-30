@@ -1098,6 +1098,26 @@ async def config_command(interaction: discord.Interaction):
 
     await interaction.response.send_modal(ConfigModal())
 
+@bot.tree.command(name="services", description="[ADMIN] Toggle bypass services on/off")
+async def services_command(interaction: discord.Interaction):
+    if interaction.user.id != BOT_OWNER_ID:
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Access Denied",
+                description="This command is only available to the bot owner.",
+                color=discord.Color.red()
+            ),
+            ephemeral=True
+        )
+        return
+    
+    view = ServiceToggleView()
+    await interaction.response.send_message(
+        embed=view.create_embed(),
+        view=view,
+        ephemeral=True
+    )
+
 @bot.tree.command(name="info", description="Get information about Bypass Bot")
 async def info_command(interaction: discord.Interaction):
     embed = discord.Embed(
