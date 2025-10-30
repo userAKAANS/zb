@@ -5,6 +5,7 @@ A Discord bot that bypasses link shorteners and script protection services with 
 
 ## Features
 - Link bypass for 50+ services
+- Configurable service preferences - enable/disable individual bypass services
 - Auto-bypass channels with automatic message cleanup
 - Rate limiting: 2 bypasses per 5 minutes, 10 per day
 - Premium upgrade notifications
@@ -13,6 +14,9 @@ A Discord bot that bypasses link shorteners and script protection services with 
 - Server-side message cleanup
 
 ## Recent Changes
+- Added service preferences system with toggle UI (owner-only)
+- Implemented paginated service toggle command `/services`
+- Service preferences persist across bot restarts
 - Added user rate limiting (2 per 5min, 10 per day)
 - Implemented auto-bypass channel persistence
 - Auto-delete non-link messages in auto-bypass channels
@@ -40,6 +44,8 @@ Create a `.env` file with:
 - `/bypass <link>` - Bypass a link
 - `/autobypass <channel>` - Enable auto-bypass in a channel
 - `/disableautobypass` - Disable auto-bypass
+- `/services` - [OWNER ONLY] Toggle individual bypass services on/off
+- `/config` - [OWNER ONLY] Configure bot API keys
 
 ## Rate Limits
 - Short-term: 2 bypasses per 5 minutes
