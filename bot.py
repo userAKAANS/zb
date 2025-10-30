@@ -30,6 +30,7 @@ BOT_OWNER_ID = int(os.getenv('BOT_OWNER_ID', 0))
 AUTOBYPASS_FILE = 'autobypass_channels.json'
 STATS_FILE = 'bypass_stats.json'
 LOG_CHANNELS_FILE = 'log_channels.json'
+SERVICE_PREFERENCES_FILE = 'service_preferences.json'
 
 def load_log_channels():
     try:
@@ -89,9 +90,26 @@ def save_stats(stats):
     except Exception as e:
         print(f"Error saving stats: {e}")
 
+def load_service_preferences():
+    try:
+        if os.path.exists(SERVICE_PREFERENCES_FILE):
+            with open(SERVICE_PREFERENCES_FILE, 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"Error loading service preferences: {e}")
+    return {service: True for service in SUPPORTED_SERVICES}
+
+def save_service_preferences(preferences):
+    try:
+        with open(SERVICE_PREFERENCES_FILE, 'w') as f:
+            json.dump(preferences, f, indent=2)
+    except Exception as e:
+        print(f"Error saving service preferences: {e}")
+
 autobypass_channels = load_autobypass_channels()
 bypass_stats = load_stats()
 log_channels = load_log_channels()
+service_preferences = load_service_preferences()
 
 ai_service = AIService(OPENAI_API_KEY) if OPENAI_API_KEY else None
 cache_manager = CacheManager(ttl_minutes=30)
@@ -186,7 +204,7 @@ def is_supported_service(url: str) -> bool:
 
         for service in SUPPORTED_SERVICES:
             if service in domain or domain in service:
-                return True
+                return service_preferences.get(service, True)
         return False
     except:
         return False
