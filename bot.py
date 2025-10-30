@@ -80,7 +80,8 @@ def load_stats():
         'failed': 0,
         'cached_hits': 0,
         'ai_analyses': 0,
-        'service_stats': {}
+        'service_stats': {},
+        'junkie_blocked': 0
     }
 
 def save_stats(stats):
@@ -120,7 +121,7 @@ SUPPORTED_SERVICES = [
     "codex", "trigon", "rekonise", "linkvertise", "paster-so", "cuttlinks",
     "boost-ink-and-bst-gg", "keyguardian", "bstshrt", "nicuse-getkey",
     "adfoc.us", "bit.do", "bit.ly", "blox-script", "boost.ink", "cl.gy",
-    "cuty-cuttlinks", "getpolsec", "goo.gl", "is.gd", "junkie-development.flow",
+    "cuty-cuttlinks", "getpolsec", "goo.gl", "is.gd",
     "ldnesfspublic", "link-hub.net", "link-unlock-complete", "link4m.com",
     "linkunlock", "linkunlocker.com", "lockr", "mboost", "mediafire",
     "overdrivehub", "paste-drop.com", "pastebin.com", "pastes_io", "quartyz",
@@ -132,6 +133,12 @@ SUPPORTED_SERVICES = [
 ]
 
 service_preferences = load_service_preferences()
+
+def contains_junkie(text: str) -> bool:
+    if not text:
+        return False
+    text_lower = text.lower()
+    return 'junkie' in text_lower
 
 def detect_url(text: str) -> Optional[str]:
     def extract_markdown_links(text):
@@ -275,6 +282,18 @@ async def log_bypass_to_channel(user: discord.User, guild: discord.Guild, link: 
 async def bypass_link(link: str, use_cache: bool = True) -> dict:
     start_time = time.time()
 
+    if contains_junkie(link):
+        bypass_stats['junkie_blocked'] = bypass_stats.get('junkie_blocked', 0) + 1
+        save_stats(bypass_stats)
+        time_taken = round(time.time() - start_time, 2)
+        return {
+            'success': False,
+            'error': 'Junkie links are not supported anymore',
+            'is_junkie': True,
+            'time_taken': time_taken,
+            'from_cache': False
+        }
+
     if use_cache:
         cached_result = cache_manager.get(link)
         if cached_result:
@@ -299,6 +318,17 @@ async def bypass_link(link: str, use_cache: bool = True) -> dict:
 
                     loadstring = data.get('loadstring') or data.get('script') or data.get('code')
                     bypassed_url = data.get('destination') or data.get('result') or data.get('bypassed_url') or data.get('url')
+
+                    if contains_junkie(str(loadstring)) or contains_junkie(str(bypassed_url)):
+                        bypass_stats['junkie_blocked'] = bypass_stats.get('junkie_blocked', 0) + 1
+                        save_stats(bypass_stats)
+                        return {
+                            'success': False,
+                            'error': 'Junkie links are not supported anymore',
+                            'is_junkie': True,
+                            'time_taken': time_taken,
+                            'from_cache': False
+                        }
 
                     result = None
                     if loadstring:
@@ -383,451 +413,6 @@ async def bypass_link(link: str, use_cache: bool = True) -> dict:
             'from_cache': False
         }
 
-class BypassModal(Modal):
-    link_input = TextInput(
-        label='Link to Bypass',
-        placeholder='Enter the link you want to bypass',
-        required=True,
-        style=discord.TextStyle.short,
-        max_length=500
-    )
-
-    def __init__(self):
-        super().__init__(title='🔓 Bypass Link')
-
-    async def on_submit(self, interaction: discord.Interaction):
-        link_to_bypass = self.link_input.value.strip()
-
-        await interaction.response.send_message(
-            embed=discord.Embed(
-                title="⏳ Processing...",
-                description=f"Bypassing link...\n`{link_to_bypass[:100]}`",
-                color=discord.Color.blue()
-            ).set_footer(text="Bypass Bot"),
-            ephemeral=True
-        )
-
-        if not is_supported_service(link_to_bypass):
-            await interaction.edit_original_response(
-                embed=discord.Embed(
-                    title="⚠️ Unsupported Service",
-                    description=f"This link may not be from a supported service.\n\nUse `/supported` to view all supported services.\n\n🔍 Attempting bypass anyway...",
-                    color=discord.Color.orange()
-                ).set_footer(text="Bypass Bot")
-            )
-            await asyncio.sleep(2)
-
-        result = await bypass_link(link_to_bypass)
-
-        if result['success']:
-            if interaction.guild:
-                await log_bypass_to_channel(
-                    interaction.user,
-                    interaction.guild,
-                    link_to_bypass,
-                    result['time_taken'],
-                    result['type']
-                )
-
-            cache_indicator = "⚡ From Cache" if result.get('from_cache') else "✨ Fresh Result"
-
-            if result['type'] == 'loadstring':
-                loadstring = result['result']
-                embed = discord.Embed(
-                    title="✅ Loadstring Retrieved Successfully",
-                    description=f"**Original Link:**\n`{link_to_bypass[:100]}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}\n\n💡 **Click the button below to copy the full loadstring!**",
-                    color=discord.Color.green()
-                )
-
-                if len(loadstring) <= 500:
-                    embed.add_field(
-                        name="📋 Loadstring Preview",
-                        value=f"```lua\n{loadstring}\n```",
-                        inline=False
-                    )
-                else:
-                    preview = loadstring[:500]
-                    embed.add_field(
-                        name="📋 Loadstring Preview (Click Copy Button for Full Script)",
-                        value=f"```lua\n{preview}...\n```\n*Preview only. Full script is {len(loadstring)} characters.*",
-                        inline=False
-                    )
-
-                embed.set_footer(text="Bypass Bot | Only you can see this")
-
-                view = CopyButtonView(loadstring, "Loadstring")
-                await interaction.edit_original_response(embed=embed, view=view)
-            elif result['type'] == 'url':
-                bypassed_url = result['result']
-                embed = discord.Embed(
-                    title="✅ Link Bypassed Successfully",
-                    description=f"**Original Link:**\n`{link_to_bypass[:100]}`\n\n**Bypassed Link:**\n`{bypassed_url}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}",
-                    color=discord.Color.green()
-                )
-                embed.set_footer(text="Bypass Bot | Only you can see this")
-
-                view = CopyLinkView(bypassed_url)
-                await interaction.edit_original_response(embed=embed, view=view)
-        else:
-            error_description = f"**Error:** {result['error']}\n\n⏱️ **Time Taken:** {result.get('time_taken', 'N/A')}s"
-
-            if ai_service:
-                try:
-                    ai_help = await ai_service.get_helpful_error_message(
-                        result['error'],
-                        link_to_bypass
-                    )
-                    error_description += f"\n\n💡 **Troubleshooting:**\n{ai_help}"
-                except:
-                    pass
-
-            await interaction.edit_original_response(
-                embed=discord.Embed(
-                    title="❌ Bypass Failed",
-                    description=error_description,
-                    color=discord.Color.red()
-                ).set_footer(text="Bypass Bot")
-            )
-
-class PanelBypassModal(Modal):
-    link_input = TextInput(
-        label='Link to Bypass',
-        placeholder='Enter the link you want to bypass',
-        required=True,
-        style=discord.TextStyle.short,
-        max_length=500
-    )
-
-    def __init__(self):
-        super().__init__(title='🔓 Bypass Link')
-
-    async def on_submit(self, interaction: discord.Interaction):
-        link_to_bypass = self.link_input.value.strip()
-
-        await interaction.response.send_message(
-            embed=discord.Embed(
-                title="⏳ Processing...",
-                description=f"Bypassing link...\n`{link_to_bypass[:100]}`",
-                color=discord.Color.blue()
-            ).set_footer(text="Bypass Bot"),
-            ephemeral=True
-        )
-
-        if not is_supported_service(link_to_bypass):
-            await interaction.edit_original_response(
-                embed=discord.Embed(
-                    title="⚠️ Unsupported Service",
-                    description=f"This link may not be from a supported service.\n\nUse `/supported` to view all supported services.\n\n🔍 Attempting bypass anyway...",
-                    color=discord.Color.orange()
-                ).set_footer(text="Bypass Bot")
-            )
-            await asyncio.sleep(2)
-
-        result = await bypass_link(link_to_bypass)
-
-        if result['success']:
-            if interaction.guild:
-                await log_bypass_to_channel(
-                    interaction.user,
-                    interaction.guild,
-                    link_to_bypass,
-                    result['time_taken'],
-                    result['type']
-                )
-
-            cache_indicator = "⚡ From Cache" if result.get('from_cache') else "✨ Fresh Result"
-
-            if result['type'] == 'loadstring':
-                loadstring = result['result']
-                embed = discord.Embed(
-                    title="✅ Loadstring Retrieved Successfully",
-                    description=f"**Original Link:**\n`{link_to_bypass[:100]}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}\n\n💡 **Click the button below to copy the full loadstring!**",
-                    color=discord.Color.green()
-                )
-
-                if len(loadstring) <= 500:
-                    embed.add_field(
-                        name="📋 Loadstring Preview",
-                        value=f"```lua\n{loadstring}\n```",
-                        inline=False
-                    )
-                else:
-                    preview = loadstring[:500]
-                    embed.add_field(
-                        name="📋 Loadstring Preview (Click Copy Button for Full Script)",
-                        value=f"```lua\n{preview}...\n```\n*Preview only. Full script is {len(loadstring)} characters.*",
-                        inline=False
-                    )
-
-                embed.set_footer(text="Bypass Bot | Only you can see this")
-
-                view = CopyButtonView(loadstring, "Loadstring")
-                await interaction.edit_original_response(embed=embed, view=view)
-            elif result['type'] == 'url':
-                bypassed_url = result['result']
-                embed = discord.Embed(
-                    title="✅ Link Bypassed Successfully",
-                    description=f"**Original Link:**\n`{link_to_bypass[:100]}`\n\n**Bypassed Link:**\n`{bypassed_url}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}",
-                    color=discord.Color.green()
-                )
-                embed.set_footer(text="Bypass Bot | Only you can see this")
-
-                view = CopyLinkView(bypassed_url)
-                await interaction.edit_original_response(embed=embed, view=view)
-        else:
-            error_description = f"**Error:** {result['error']}\n\n⏱️ **Time Taken:** {result.get('time_taken', 'N/A')}s"
-
-            if ai_service:
-                try:
-                    ai_help = await ai_service.get_helpful_error_message(
-                        result['error'],
-                        link_to_bypass
-                    )
-                    error_description += f"\n\n💡 **Troubleshooting:**\n{ai_help}"
-                except:
-                    pass
-
-            await interaction.edit_original_response(
-                embed=discord.Embed(
-                    title="❌ Bypass Failed",
-                    description=error_description,
-                    color=discord.Color.red()
-                ).set_footer(text="Bypass Bot")
-            )
-
-class SayModal(Modal):
-    message_input = TextInput(
-        label='Message',
-        placeholder='Enter the message you want the bot to say',
-        required=True,
-        style=discord.TextStyle.paragraph,
-        max_length=2000
-    )
-
-    def __init__(self):
-        super().__init__(title='📢 Say Message')
-
-    async def on_submit(self, interaction: discord.Interaction):
-        message_content = self.message_input.value
-
-        await interaction.response.send_message(
-            embed=discord.Embed(
-                title="✅ Message Sent",
-                description="Your message has been sent anonymously!",
-                color=discord.Color.green()
-            ).set_footer(text="Bypass Bot"),
-            ephemeral=True
-        )
-
-        await interaction.channel.send(message_content)
-
-class EmbedModal(Modal):
-    title_input = TextInput(
-        label='Embed Title',
-        placeholder='Enter the embed title',
-        required=True,
-        style=discord.TextStyle.short,
-        max_length=256
-    )
-
-    description_input = TextInput(
-        label='Embed Description',
-        placeholder='Enter the embed description',
-        required=True,
-        style=discord.TextStyle.paragraph,
-        max_length=4000
-    )
-
-    color_input = TextInput(
-        label='Embed Color (hex code, e.g., #FF5733)',
-        placeholder='#FF5733',
-        required=False,
-        style=discord.TextStyle.short,
-        max_length=7
-    )
-
-    def __init__(self):
-        super().__init__(title='🎨 Create Embed')
-
-    async def on_submit(self, interaction: discord.Interaction):
-        title = self.title_input.value
-        description = self.description_input.value
-        color_hex = self.color_input.value.strip() if self.color_input.value else "#5865F2"
-
-        try:
-            if color_hex.startswith('#'):
-                color_hex = color_hex[1:]
-            color = discord.Color(int(color_hex, 16))
-        except:
-            color = discord.Color.blue()
-
-        embed = discord.Embed(
-            title=title,
-            description=description,
-            color=color
-        )
-
-        await interaction.response.send_message(
-            embed=discord.Embed(
-                title="✅ Embed Created",
-                description="Your embed has been created successfully!",
-                color=discord.Color.green()
-            ).set_footer(text="Bypass Bot"),
-            ephemeral=True
-        )
-
-        await interaction.channel.send(embed=embed)
-
-class ConfigModal(Modal):
-    bypass_api_key = TextInput(
-        label='Bypass API Key',
-        placeholder='Enter your ace-bypass.com API key',
-        required=True,
-        style=discord.TextStyle.short,
-        max_length=200
-    )
-
-    openai_api_key = TextInput(
-        label='OpenAI API Key (Optional)',
-        placeholder='Enter your OpenAI API key for AI features',
-        required=False,
-        style=discord.TextStyle.short,
-        max_length=200
-    )
-
-    bot_owner_id = TextInput(
-        label='Bot Owner ID',
-        placeholder='Your Discord user ID',
-        required=True,
-        style=discord.TextStyle.short,
-        max_length=50
-    )
-
-    def __init__(self):
-        super().__init__(title='🔑 Bot Configuration')
-
-    async def on_submit(self, interaction: discord.Interaction):
-        global BYPASS_API_KEY, OPENAI_API_KEY, BOT_OWNER_ID, ai_service
-
-        bypass_key = self.bypass_api_key.value.strip()
-        openai_key = self.openai_api_key.value.strip() if self.openai_api_key.value else ""
-        owner_id = self.bot_owner_id.value.strip()
-
-        try:
-            owner_id_int = int(owner_id)
-        except ValueError:
-            await interaction.response.send_message(
-                embed=discord.Embed(
-                    title="❌ Invalid Owner ID",
-                    description="Bot Owner ID must be a numeric Discord user ID.",
-                    color=discord.Color.red()
-                ),
-                ephemeral=True
-            )
-            return
-
-        env_file = '.env'
-        if not os.path.exists(env_file):
-            with open(env_file, 'w') as f:
-                f.write(f"DISCORD_BOT_TOKEN={DISCORD_BOT_TOKEN}\n")
-                f.write(f"BYPASS_API_KEY={bypass_key}\n")
-                f.write(f"OPENAI_API_KEY={openai_key}\n")
-                f.write(f"BOT_OWNER_ID={owner_id}\n")
-        else:
-            set_key(env_file, 'BYPASS_API_KEY', bypass_key)
-            set_key(env_file, 'OPENAI_API_KEY', openai_key)
-            set_key(env_file, 'BOT_OWNER_ID', owner_id)
-
-        BYPASS_API_KEY = bypass_key
-        OPENAI_API_KEY = openai_key if openai_key else None
-        BOT_OWNER_ID = owner_id_int
-
-        if openai_key:
-            ai_service = AIService(openai_key)
-
-        embed = discord.Embed(
-            title="✅ Configuration Updated",
-            description="Bot configuration has been updated successfully!",
-            color=discord.Color.green()
-        )
-        embed.add_field(
-            name="📋 Configuration Status",
-            value=f"**Bypass API Key:** {'Set ✅' if bypass_key else 'Not Set ❌'}\n**OpenAI API Key:** {'Set ✅' if openai_key else 'Not Set ❌'}\n**Bot Owner ID:** {owner_id}",
-            inline=False
-        )
-
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-class SupportedServicesView(View):
-    def __init__(self, services_per_page: int = 15):
-        super().__init__(timeout=300)
-        self.services_per_page = services_per_page
-        self.total_services = len(SUPPORTED_SERVICES)
-        self.total_pages = (self.total_services + services_per_page - 1) // services_per_page
-        self.current_page = 0
-
-        self.first_button = Button(label="⏮️ First", style=discord.ButtonStyle.secondary, disabled=True)
-        self.prev_button = Button(label="◀️ Previous", style=discord.ButtonStyle.primary, disabled=True)
-        self.next_button = Button(label="Next ▶️", style=discord.ButtonStyle.primary, disabled=False)
-        self.last_button = Button(label="Last ⏭️", style=discord.ButtonStyle.secondary, disabled=False)
-
-        self.first_button.callback = self.first_page
-        self.prev_button.callback = self.previous_page
-        self.next_button.callback = self.next_page
-        self.last_button.callback = self.last_page
-
-        self.add_item(self.first_button)
-        self.add_item(self.prev_button)
-        self.add_item(self.next_button)
-        self.add_item(self.last_button)
-
-    def create_embed(self) -> discord.Embed:
-        start_idx = self.current_page * self.services_per_page
-        end_idx = min(start_idx + self.services_per_page, self.total_services)
-        services_list = SUPPORTED_SERVICES[start_idx:end_idx]
-
-        embed = discord.Embed(
-            title="✅ Supported Bypass Services",
-            description=f"Bypass Bot supports **{self.total_services}** different services!\n\nUse the buttons below to navigate through pages.",
-            color=discord.Color.green()
-        )
-
-        services_text = "\n".join([f"• {service}" for service in services_list])
-        embed.add_field(
-            name=f"Services {start_idx + 1}-{end_idx}",
-            value=services_text,
-            inline=False
-        )
-
-        embed.set_footer(text=f"Page {self.current_page + 1} of {self.total_pages} | Use /bypass to bypass a link")
-        return embed
-
-    def update_buttons(self):
-        self.first_button.disabled = self.current_page == 0
-        self.prev_button.disabled = self.current_page == 0
-        self.next_button.disabled = self.current_page >= self.total_pages - 1
-        self.last_button.disabled = self.current_page >= self.total_pages - 1
-
-    async def first_page(self, interaction: discord.Interaction):
-        self.current_page = 0
-        self.update_buttons()
-        await interaction.response.edit_message(embed=self.create_embed(), view=self)
-
-    async def previous_page(self, interaction: discord.Interaction):
-        self.current_page = max(0, self.current_page - 1)
-        self.update_buttons()
-        await interaction.response.edit_message(embed=self.create_embed(), view=self)
-
-    async def next_page(self, interaction: discord.Interaction):
-        self.current_page = min(self.total_pages - 1, self.current_page + 1)
-        self.update_buttons()
-        await interaction.response.edit_message(embed=self.create_embed(), view=self)
-
-    async def last_page(self, interaction: discord.Interaction):
-        self.current_page = self.total_pages - 1
-        self.update_buttons()
-        await interaction.response.edit_message(embed=self.create_embed(), view=self)
-
 class CopyContentButton(discord.ui.Button):
     def __init__(self, content: str, content_type: str):
         super().__init__(
@@ -900,76 +485,528 @@ class CopyLinkView(View):
             url=bypassed_url
         ))
 
-class BotInfoView(View):
+class BypassModal(Modal):
+    link_input = TextInput(
+        label='Link to Bypass',
+        placeholder='Enter the link you want to bypass',
+        required=True,
+        style=discord.TextStyle.short,
+        max_length=500
+    )
+
     def __init__(self):
-        super().__init__(timeout=None)
-        self.add_item(Button(
-            label="🔗 Join Our Discord Server",
-            style=discord.ButtonStyle.link,
-            url="https://discord.gg/fUzxqhjWZ"
-        ))
+        super().__init__(title='🔓 Bypass Link')
+
+    async def on_submit(self, interaction: discord.Interaction):
+        link_to_bypass = self.link_input.value.strip()
+
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="⏳ Processing...",
+                description=f"Bypassing link...\n`{link_to_bypass[:100]}`",
+                color=discord.Color.blue()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+
+        if contains_junkie(link_to_bypass):
+            await interaction.edit_original_response(
+                embed=discord.Embed(
+                    title="🚫 Junkie Links Not Supported",
+                    description="Junkie links are not supported anymore\n\nPlease use a different link service.",
+                    color=discord.Color.red()
+                ).set_footer(text="Bypass Bot")
+            )
+            return
+
+        if not is_supported_service(link_to_bypass):
+            await interaction.edit_original_response(
+                embed=discord.Embed(
+                    title="⚠️ Unsupported Service",
+                    description=f"This link may not be from a supported service.\n\nUse `/supported` to view all supported services.\n\n🔍 Attempting bypass anyway...",
+                    color=discord.Color.orange()
+                ).set_footer(text="Bypass Bot")
+            )
+            await asyncio.sleep(2)
+
+        result = await bypass_link(link_to_bypass)
+
+        if result['success']:
+            if interaction.guild:
+                await log_bypass_to_channel(
+                    interaction.user,
+                    interaction.guild,
+                    link_to_bypass,
+                    result['time_taken'],
+                    result['type']
+                )
+
+            cache_indicator = "⚡ From Cache" if result.get('from_cache') else "✨ Fresh Result"
+
+            if result['type'] == 'loadstring':
+                loadstring = result['result']
+                embed = discord.Embed(
+                    title="✅ Loadstring Retrieved Successfully",
+                    description=f"**Original Link:**\n`{link_to_bypass[:100]}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}\n\n💡 **Click the button below to copy the full loadstring!**",
+                    color=discord.Color.green()
+                )
+
+                if len(loadstring) <= 500:
+                    embed.add_field(
+                        name="📋 Loadstring Preview",
+                        value=f"```lua\n{loadstring}\n```",
+                        inline=False
+                    )
+                else:
+                    preview = loadstring[:500]
+                    embed.add_field(
+                        name="📋 Loadstring Preview (Click Copy Button for Full Script)",
+                        value=f"```lua\n{preview}...\n```\n*Preview only. Full script is {len(loadstring)} characters.*",
+                        inline=False
+                    )
+
+                embed.set_footer(text="Bypass Bot | Only you can see this")
+
+                view = CopyButtonView(loadstring, "Loadstring")
+                await interaction.edit_original_response(embed=embed, view=view)
+            elif result['type'] == 'url':
+                bypassed_url = result['result']
+                embed = discord.Embed(
+                    title="✅ Link Bypassed Successfully",
+                    description=f"**Original Link:**\n`{link_to_bypass[:100]}`\n\n**Bypassed Link:**\n`{bypassed_url}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}",
+                    color=discord.Color.green()
+                )
+                embed.set_footer(text="Bypass Bot | Only you can see this")
+
+                view = CopyLinkView(bypassed_url)
+                await interaction.edit_original_response(embed=embed, view=view)
+        else:
+            if result.get('is_junkie'):
+                await interaction.edit_original_response(
+                    embed=discord.Embed(
+                        title="🚫 Junkie Links Not Supported",
+                        description="Junkie links are not supported anymore\n\nPlease use a different link service.",
+                        color=discord.Color.red()
+                    ).set_footer(text="Bypass Bot")
+                )
+                return
+
+            error_description = f"**Error:** {result['error']}\n\n⏱️ **Time Taken:** {result.get('time_taken', 'N/A')}s"
+
+            if ai_service:
+                try:
+                    ai_help = await ai_service.get_helpful_error_message(
+                        result['error'],
+                        link_to_bypass
+                    )
+                    error_description += f"\n\n💡 **Troubleshooting:**\n{ai_help}"
+                except:
+                    pass
+
+            await interaction.edit_original_response(
+                embed=discord.Embed(
+                    title="❌ Bypass Failed",
+                    description=error_description,
+                    color=discord.Color.red()
+                ).set_footer(text="Bypass Bot")
+            )
+
+class PanelBypassModal(Modal):
+    link_input = TextInput(
+        label='Link to Bypass',
+        placeholder='Enter the link you want to bypass',
+        required=True,
+        style=discord.TextStyle.short,
+        max_length=500
+    )
+
+    def __init__(self):
+        super().__init__(title='🔓 Bypass Link')
+
+    async def on_submit(self, interaction: discord.Interaction):
+        link_to_bypass = self.link_input.value.strip()
+
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="⏳ Processing...",
+                description=f"Bypassing link...\n`{link_to_bypass[:100]}`",
+                color=discord.Color.blue()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+
+        if contains_junkie(link_to_bypass):
+            await interaction.edit_original_response(
+                embed=discord.Embed(
+                    title="🚫 Junkie Links Not Supported",
+                    description="Junkie links are not supported anymore\n\nPlease use a different link service.",
+                    color=discord.Color.red()
+                ).set_footer(text="Bypass Bot")
+            )
+            return
+
+        if not is_supported_service(link_to_bypass):
+            await interaction.edit_original_response(
+                embed=discord.Embed(
+                    title="⚠️ Unsupported Service",
+                    description=f"This link may not be from a supported service.\n\nUse `/supported` to view all supported services.\n\n🔍 Attempting bypass anyway...",
+                    color=discord.Color.orange()
+                ).set_footer(text="Bypass Bot")
+            )
+            await asyncio.sleep(2)
+
+        result = await bypass_link(link_to_bypass)
+
+        if result['success']:
+            if interaction.guild:
+                await log_bypass_to_channel(
+                    interaction.user,
+                    interaction.guild,
+                    link_to_bypass,
+                    result['time_taken'],
+                    result['type']
+                )
+
+            cache_indicator = "⚡ From Cache" if result.get('from_cache') else "✨ Fresh Result"
+
+            if result['type'] == 'loadstring':
+                loadstring = result['result']
+                embed = discord.Embed(
+                    title="✅ Loadstring Retrieved Successfully",
+                    description=f"**Original Link:**\n`{link_to_bypass[:100]}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}\n\n💡 **Click the button below to copy the full loadstring!**",
+                    color=discord.Color.green()
+                )
+
+                if len(loadstring) <= 500:
+                    embed.add_field(
+                        name="📋 Loadstring Preview",
+                        value=f"```lua\n{loadstring}\n```",
+                        inline=False
+                    )
+                else:
+                    preview = loadstring[:500]
+                    embed.add_field(
+                        name="📋 Loadstring Preview (Click Copy Button for Full Script)",
+                        value=f"```lua\n{preview}...\n```\n*Preview only. Full script is {len(loadstring)} characters.*",
+                        inline=False
+                    )
+
+                embed.set_footer(text="Bypass Bot | Only you can see this")
+
+                view = CopyButtonView(loadstring, "Loadstring")
+                await interaction.edit_original_response(embed=embed, view=view)
+            elif result['type'] == 'url':
+                bypassed_url = result['result']
+                embed = discord.Embed(
+                    title="✅ Link Bypassed Successfully",
+                    description=f"**Original Link:**\n`{link_to_bypass[:100]}`\n\n**Bypassed Link:**\n`{bypassed_url}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}",
+                    color=discord.Color.green()
+                )
+                embed.set_footer(text="Bypass Bot | Only you can see this")
+
+                view = CopyLinkView(bypassed_url)
+                await interaction.edit_original_response(embed=embed, view=view)
+        else:
+            if result.get('is_junkie'):
+                await interaction.edit_original_response(
+                    embed=discord.Embed(
+                        title="🚫 Junkie Links Not Supported",
+                        description="Junkie links are not supported anymore\n\nPlease use a different link service.",
+                        color=discord.Color.red()
+                    ).set_footer(text="Bypass Bot")
+                )
+                return
+
+            error_description = f"**Error:** {result['error']}\n\n⏱️ **Time Taken:** {result.get('time_taken', 'N/A')}s"
+
+            if ai_service:
+                try:
+                    ai_help = await ai_service.get_helpful_error_message(
+                        result['error'],
+                        link_to_bypass
+                    )
+                    error_description += f"\n\n💡 **Troubleshooting:**\n{ai_help}"
+                except:
+                    pass
+
+            await interaction.edit_original_response(
+                embed=discord.Embed(
+                    title="❌ Bypass Failed",
+                    description=error_description,
+                    color=discord.Color.red()
+                ).set_footer(text="Bypass Bot")
+            )
 
 class BypassPanelView(View):
     def __init__(self):
         super().__init__(timeout=None)
 
-        bypass_button = Button(
-            label="🔓 Bypass Link",
-            style=discord.ButtonStyle.primary,
-            custom_id="bypass_panel_button"
-        )
-        bypass_button.callback = self.bypass_button_callback
-        self.add_item(bypass_button)
-
-    async def bypass_button_callback(self, interaction: discord.Interaction):
+    @discord.ui.button(label="🔓 Bypass Link", style=discord.ButtonStyle.primary, custom_id="panel_bypass_button")
+    async def bypass_button(self, interaction: discord.Interaction, button: Button):
         await interaction.response.send_modal(PanelBypassModal())
 
-class ServiceToggleView(View):
-    def __init__(self, services_per_page: int = 10):
-        super().__init__(timeout=300)
+class SayModal(Modal):
+    message_input = TextInput(
+        label='Message',
+        placeholder='Enter the message you want the bot to say',
+        required=True,
+        style=discord.TextStyle.paragraph,
+        max_length=2000
+    )
+
+    def __init__(self):
+        super().__init__(title='💬 Say Message')
+
+    async def on_submit(self, interaction: discord.Interaction):
+        message_content = self.message_input.value
+
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="✅ Message Sent",
+                description=f"Message sent successfully!",
+                color=discord.Color.green()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+
+        await interaction.channel.send(message_content)
+
+class EmbedModal(Modal):
+    title_input = TextInput(
+        label='Embed Title',
+        placeholder='Enter the title for the embed',
+        required=True,
+        style=discord.TextStyle.short,
+        max_length=256
+    )
+
+    description_input = TextInput(
+        label='Embed Description',
+        placeholder='Enter the description for the embed',
+        required=True,
+        style=discord.TextStyle.paragraph,
+        max_length=4000
+    )
+
+    color_input = TextInput(
+        label='Embed Color (hex code)',
+        placeholder='Enter hex color code (e.g., #FF0000 for red)',
+        required=False,
+        style=discord.TextStyle.short,
+        max_length=7
+    )
+
+    def __init__(self):
+        super().__init__(title='📝 Create Embed')
+
+    async def on_submit(self, interaction: discord.Interaction):
+        title = self.title_input.value
+        description = self.description_input.value
+        color_hex = self.color_input.value.strip()
+
+        try:
+            if color_hex and color_hex.startswith('#'):
+                color = discord.Color(int(color_hex[1:], 16))
+            else:
+                color = discord.Color.blue()
+        except:
+            color = discord.Color.blue()
+
+        embed = discord.Embed(
+            title=title,
+            description=description,
+            color=color
+        )
+
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="✅ Embed Created",
+                description="Custom embed has been created successfully!",
+                color=discord.Color.green()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+
+        await interaction.channel.send(embed=embed)
+
+class ConfigModal(Modal):
+    bypass_api_key_input = TextInput(
+        label='Bypass API Key',
+        placeholder='Enter your Bypass API key',
+        required=False,
+        style=discord.TextStyle.short,
+        max_length=200
+    )
+
+    openai_api_key_input = TextInput(
+        label='OpenAI API Key',
+        placeholder='Enter your OpenAI API key (optional)',
+        required=False,
+        style=discord.TextStyle.short,
+        max_length=200
+    )
+
+    def __init__(self):
+        super().__init__(title='⚙️ Configure API Keys')
+
+    async def on_submit(self, interaction: discord.Interaction):
+        bypass_key = self.bypass_api_key_input.value.strip()
+        openai_key = self.openai_api_key_input.value.strip()
+
+        env_file = '.env'
+        updated = []
+
+        if bypass_key:
+            set_key(env_file, 'BYPASS_API_KEY', bypass_key)
+            os.environ['BYPASS_API_KEY'] = bypass_key
+            global BYPASS_API_KEY
+            BYPASS_API_KEY = bypass_key
+            updated.append('Bypass API Key')
+
+        if openai_key:
+            set_key(env_file, 'OPENAI_API_KEY', openai_key)
+            os.environ['OPENAI_API_KEY'] = openai_key
+            global OPENAI_API_KEY, ai_service
+            OPENAI_API_KEY = openai_key
+            ai_service = AIService(openai_key)
+            updated.append('OpenAI API Key')
+
+        if updated:
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    title="✅ Configuration Updated",
+                    description=f"Successfully updated: {', '.join(updated)}\n\nRestart the bot for changes to take full effect.",
+                    color=discord.Color.green()
+                ).set_footer(text="Bypass Bot"),
+                ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    title="ℹ️ No Changes",
+                    description="No API keys were provided.",
+                    color=discord.Color.blue()
+                ).set_footer(text="Bypass Bot"),
+                ephemeral=True
+            )
+
+class BotInfoView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+        self.add_item(Button(label="🔗 Join Our Discord Server", url="https://discord.gg/fUzxqhjWZ", style=discord.ButtonStyle.link))
+
+class SupportedServicesView(View):
+    def __init__(self, services_per_page: int = 15):
+        super().__init__(timeout=180)
         self.services_per_page = services_per_page
-        self.total_services = len(SUPPORTED_SERVICES)
-        self.total_pages = (self.total_services + services_per_page - 1) // services_per_page
         self.current_page = 0
-        
-        self.first_button = Button(label="⏮️", style=discord.ButtonStyle.secondary, disabled=True, row=3)
-        self.prev_button = Button(label="◀️", style=discord.ButtonStyle.secondary, disabled=True, row=3)
-        self.page_info = Button(label="Page 1", style=discord.ButtonStyle.secondary, disabled=True, row=3)
-        self.next_button = Button(label="▶️", style=discord.ButtonStyle.secondary, disabled=False, row=3)
-        self.last_button = Button(label="⏭️", style=discord.ButtonStyle.secondary, disabled=False, row=3)
-        
+        self.total_pages = (len(SUPPORTED_SERVICES) + services_per_page - 1) // services_per_page
+
+        self.first_button = Button(label="⏮️", style=discord.ButtonStyle.gray, disabled=True)
+        self.prev_button = Button(label="◀️", style=discord.ButtonStyle.primary, disabled=True)
+        self.next_button = Button(label="▶️", style=discord.ButtonStyle.primary, disabled=self.total_pages <= 1)
+        self.last_button = Button(label="⏭️", style=discord.ButtonStyle.gray, disabled=self.total_pages <= 1)
+
         self.first_button.callback = self.first_page
         self.prev_button.callback = self.previous_page
         self.next_button.callback = self.next_page
         self.last_button.callback = self.last_page
-        
-        self.refresh_buttons()
-    
-    def refresh_buttons(self):
-        self.clear_items()
-        
-        start_idx = self.current_page * self.services_per_page
-        end_idx = min(start_idx + self.services_per_page, self.total_services)
-        services_list = SUPPORTED_SERVICES[start_idx:end_idx]
-        
-        for i, service in enumerate(services_list):
-            is_enabled = service_preferences.get(service, True)
-            button = Button(
-                label=f"{'✅' if is_enabled else '❌'} {service}",
-                style=discord.ButtonStyle.success if is_enabled else discord.ButtonStyle.danger,
-                custom_id=f"toggle_{service}_{i}",
-                row=i // 5
-            )
-            button.callback = self.create_toggle_callback(service)
-            self.add_item(button)
-        
+
         self.add_item(self.first_button)
         self.add_item(self.prev_button)
-        self.page_info.label = f"Page {self.current_page + 1}/{self.total_pages}"
-        self.add_item(self.page_info)
         self.add_item(self.next_button)
         self.add_item(self.last_button)
-    
+
+    def create_embed(self) -> discord.Embed:
+        start_idx = self.current_page * self.services_per_page
+        end_idx = min(start_idx + self.services_per_page, len(SUPPORTED_SERVICES))
+
+        services_on_page = SUPPORTED_SERVICES[start_idx:end_idx]
+
+        embed = discord.Embed(
+            title="🌐 Supported Bypass Services",
+            description=f"Here are all the bypass services supported by Bypass Bot.\n\n**Total Services:** {len(SUPPORTED_SERVICES)}",
+            color=discord.Color.blue()
+        )
+
+        services_text = "\n".join([f"• `{service}`" for service in services_on_page])
+        embed.add_field(
+            name=f"Services (Page {self.current_page + 1}/{self.total_pages})",
+            value=services_text,
+            inline=False
+        )
+
+        embed.set_footer(text=f"Page {self.current_page + 1} of {self.total_pages}")
+        return embed
+
+    def update_buttons(self):
+        self.first_button.disabled = self.current_page == 0
+        self.prev_button.disabled = self.current_page == 0
+        self.next_button.disabled = self.current_page >= self.total_pages - 1
+        self.last_button.disabled = self.current_page >= self.total_pages - 1
+
+    async def first_page(self, interaction: discord.Interaction):
+        self.current_page = 0
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.create_embed(), view=self)
+
+    async def previous_page(self, interaction: discord.Interaction):
+        self.current_page = max(0, self.current_page - 1)
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.create_embed(), view=self)
+
+    async def next_page(self, interaction: discord.Interaction):
+        self.current_page = min(self.total_pages - 1, self.current_page + 1)
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.create_embed(), view=self)
+
+    async def last_page(self, interaction: discord.Interaction):
+        self.current_page = self.total_pages - 1
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.create_embed(), view=self)
+
+class ServiceToggleView(View):
+    def __init__(self, services_per_page: int = 5):
+        super().__init__(timeout=180)
+        self.services_per_page = services_per_page
+        self.current_page = 0
+        self.total_services = len(SUPPORTED_SERVICES)
+        self.total_pages = (self.total_services + services_per_page - 1) // services_per_page
+
+        self.first_button = Button(label="⏮️", style=discord.ButtonStyle.gray, row=4)
+        self.prev_button = Button(label="◀️", style=discord.ButtonStyle.primary, row=4)
+        self.next_button = Button(label="▶️", style=discord.ButtonStyle.primary, row=4)
+        self.last_button = Button(label="⏭️", style=discord.ButtonStyle.gray, row=4)
+
+        self.first_button.callback = self.first_page
+        self.prev_button.callback = self.previous_page
+        self.next_button.callback = self.next_page
+        self.last_button.callback = self.last_page
+
+        self.refresh_buttons()
+        self.update_buttons()
+
+    def refresh_buttons(self):
+        self.clear_items()
+
+        start_idx = self.current_page * self.services_per_page
+        end_idx = min(start_idx + self.services_per_page, self.total_services)
+
+        for idx in range(start_idx, end_idx):
+            service = SUPPORTED_SERVICES[idx]
+            is_enabled = service_preferences.get(service, True)
+            label = f"{'✅' if is_enabled else '❌'} {service[:20]}"
+            style = discord.ButtonStyle.green if is_enabled else discord.ButtonStyle.red
+            button = Button(label=label, style=style, row=idx - start_idx)
+            button.callback = self.create_toggle_callback(service)
+            self.add_item(button)
+
+        self.add_item(self.first_button)
+        self.add_item(self.prev_button)
+        self.add_item(self.next_button)
+        self.add_item(self.last_button)
+
     def create_toggle_callback(self, service: str):
         async def callback(interaction: discord.Interaction):
             global service_preferences
@@ -978,45 +1015,45 @@ class ServiceToggleView(View):
             self.refresh_buttons()
             await interaction.response.edit_message(embed=self.create_embed(), view=self)
         return callback
-    
+
     def create_embed(self) -> discord.Embed:
         start_idx = self.current_page * self.services_per_page
         end_idx = min(start_idx + self.services_per_page, self.total_services)
         enabled_count = sum(1 for s in SUPPORTED_SERVICES if service_preferences.get(s, True))
-        
+
         embed = discord.Embed(
             title="🔧 Service Preferences",
             description=f"Toggle individual bypass services on/off.\n\n**Enabled:** {enabled_count}/{self.total_services} services\n\nClick a service to toggle it.",
             color=discord.Color.blue()
         )
-        
+
         embed.set_footer(text=f"Page {self.current_page + 1} of {self.total_pages} | Services {start_idx + 1}-{end_idx}")
         return embed
-    
+
     def update_buttons(self):
         self.first_button.disabled = self.current_page == 0
         self.prev_button.disabled = self.current_page == 0
         self.next_button.disabled = self.current_page >= self.total_pages - 1
         self.last_button.disabled = self.current_page >= self.total_pages - 1
-    
+
     async def first_page(self, interaction: discord.Interaction):
         self.current_page = 0
         self.update_buttons()
         self.refresh_buttons()
         await interaction.response.edit_message(embed=self.create_embed(), view=self)
-    
+
     async def previous_page(self, interaction: discord.Interaction):
         self.current_page = max(0, self.current_page - 1)
         self.update_buttons()
         self.refresh_buttons()
         await interaction.response.edit_message(embed=self.create_embed(), view=self)
-    
+
     async def next_page(self, interaction: discord.Interaction):
         self.current_page = min(self.total_pages - 1, self.current_page + 1)
         self.update_buttons()
         self.refresh_buttons()
         await interaction.response.edit_message(embed=self.create_embed(), view=self)
-    
+
     async def last_page(self, interaction: discord.Interaction):
         self.current_page = self.total_pages - 1
         self.update_buttons()
@@ -1111,7 +1148,7 @@ async def services_command(interaction: discord.Interaction):
             ephemeral=True
         )
         return
-    
+
     view = ServiceToggleView()
     await interaction.response.send_message(
         embed=view.create_embed(),
@@ -1127,9 +1164,10 @@ async def info_command(interaction: discord.Interaction):
         color=discord.Color.blue()
     )
 
+    junkie_blocked = bypass_stats.get('junkie_blocked', 0)
     embed.add_field(
         name="📊 Statistics",
-        value=f"**Total Bypassed:** {bypass_stats['total_bypassed']:,}\n**Loadstrings:** {bypass_stats['loadstrings']:,}\n**URLs:** {bypass_stats['urls']:,}\n**Failed:** {bypass_stats['failed']:,}\n**Cache Hits:** {bypass_stats['cached_hits']:,}",
+        value=f"**Total Bypassed:** {bypass_stats['total_bypassed']:,}\n**Loadstrings:** {bypass_stats['loadstrings']:,}\n**URLs:** {bypass_stats['urls']:,}\n**Failed:** {bypass_stats['failed']:,}\n**Cache Hits:** {bypass_stats['cached_hits']:,}\n**Junkie Blocked:** {junkie_blocked:,}",
         inline=True
     )
 
@@ -1147,7 +1185,7 @@ async def info_command(interaction: discord.Interaction):
 
     embed.add_field(
         name="⚙️ Admin Commands",
-        value="`/say` - Make bot say a message\n`/embed` - Create custom embeds\n`/panel` - Create bypass panel\n`/autobypass` - Enable auto-bypass\n`/disableautobypass` - Disable auto-bypass\n`/purge` - Delete messages\n`/ban` - Ban a user\n`/timeout` - Timeout a user",
+        value="`/say` - Make bot say a message\n`/embed` - Create custom embeds\n`/panel` - Create bypass panel\n`/autobypass` - Enable auto-bypass\n`/disableautobypass` - Disable auto-bypass",
         inline=False
     )
 
@@ -1170,9 +1208,10 @@ async def stats_command(interaction: discord.Interaction):
         color=discord.Color.blue()
     )
 
+    junkie_blocked = bypass_stats.get('junkie_blocked', 0)
     embed.add_field(
         name="🔢 Total Statistics",
-        value=f"**Total Bypassed:** {bypass_stats['total_bypassed']:,}\n**Loadstrings:** {bypass_stats['loadstrings']:,}\n**URLs:** {bypass_stats['urls']:,}\n**Failed Attempts:** {bypass_stats['failed']:,}\n**Cache Hits:** {bypass_stats['cached_hits']:,}",
+        value=f"**Total Bypassed:** {bypass_stats['total_bypassed']:,}\n**Loadstrings:** {bypass_stats['loadstrings']:,}\n**URLs:** {bypass_stats['urls']:,}\n**Failed Attempts:** {bypass_stats['failed']:,}\n**Cache Hits:** {bypass_stats['cached_hits']:,}\n**Junkie Blocked:** {junkie_blocked:,}",
         inline=True
     )
 
@@ -1318,7 +1357,7 @@ async def setlogs_command(interaction: discord.Interaction, channel: discord.Tex
     await interaction.response.send_message(
         embed=discord.Embed(
             title="✅ Bypass Logs Channel Set",
-            description=f"Bypass logs will now be sent to {channel.mention}!\n\nWhenever a user uses the `/bypass` command, it will be logged with:\n• User mention\n• Link used\n• Time taken\n• Total bypasses the bot has done",
+            description=f"Bypass logs will now be sent to {channel.mention}!",
             color=discord.Color.green()
         ).set_footer(text="Bypass Bot Logger"),
         ephemeral=True
@@ -1864,13 +1903,6 @@ async def dm_command(
             )
             return
 
-        confirm_embed = discord.Embed(
-            title="⚠️ Confirm Broadcast",
-            description=f"You are about to send a DM to **{interaction.guild.member_count}** members in **{interaction.guild.name}**.\n\nThis action cannot be undone and may take several minutes.\n\nAre you sure you want to continue?",
-            color=discord.Color.orange()
-        )
-        confirm_embed.set_footer(text="Broadcast will send to all non-bot members")
-
         await interaction.response.send_modal(DMModal(broadcast=True, guild=interaction.guild))
 
     else:
@@ -1884,7 +1916,7 @@ async def dm_command(
         )
 
 @bot.event
-async def on_message(message):
+async def on_message(message: discord.Message):
     if message.author.bot:
         return
 
@@ -1893,87 +1925,102 @@ async def on_message(message):
             detected_link = detect_url(message.content)
 
             if detected_link:
-                try:
-                    await message.delete()
-                except:
-                    pass
+                if contains_junkie(detected_link):
+                    try:
+                        await message.delete()
+                        await message.channel.send(
+                            embed=discord.Embed(
+                                description=f"🚫 {message.author.mention} - Junkie links are not supported anymore",
+                                color=discord.Color.red()
+                            ).set_footer(text="Bypass Bot"),
+                            delete_after=15
+                        )
+                    except:
+                        pass
+                    return
 
                 result = await bypass_link(detected_link)
 
                 if result['success']:
-                    dm_embed = discord.Embed(
-                        title="✅ Auto-Bypass Result",
-                        description=f"**Original Link:**\n`{detected_link[:100]}`\n\n⏱️ **Time Taken:** {result['time_taken']}s",
-                        color=discord.Color.green()
-                    )
-
-                    view = None
-                    if result['type'] == 'loadstring':
-                        loadstring = result['result']
-                        if len(loadstring) <= 500:
-                            dm_embed.add_field(
-                                name="📋 Loadstring",
-                                value=f"```lua\n{loadstring}\n```",
-                                inline=False
-                            )
-                        else:
-                            dm_embed.add_field(
-                                name="📋 Loadstring Preview (Click Copy Button)",
-                                value=f"```lua\n{loadstring[:500]}...\n```\n*Full script is {len(loadstring)} characters.*",
-                                inline=False
-                            )
-                        view = CopyButtonView(loadstring, "Loadstring")
-                    elif result['type'] == 'url':
-                        dm_embed.add_field(
-                            name="🔗 Bypassed Link",
-                            value=f"`{result['result']}`",
-                            inline=False
-                        )
-                        view = CopyLinkView(result['result'])
-
-                    dm_embed.set_footer(text=f"From {message.guild.name} | Bypass Bot")
-
                     try:
-                        await message.author.send(embed=dm_embed, view=view)
+                        await message.delete()
                         await message.channel.send(
                             embed=discord.Embed(
-                                description=f"✅ {message.author.mention} - Check your DMs!",
+                                description=f"✅ {message.author.mention} - Check your DMs for the bypass result!",
                                 color=discord.Color.green()
                             ).set_footer(text="Bypass Bot"),
                             delete_after=10
                         )
-                    except discord.Forbidden:
+
+                        if result['type'] == 'loadstring':
+                            loadstring = result['result']
+                            embed = discord.Embed(
+                                title="✅ Auto-Bypass: Loadstring Retrieved",
+                                description=f"**Original Link:**\n`{detected_link[:100]}`\n\n⏱️ **Time Taken:** {result['time_taken']}s",
+                                color=discord.Color.green()
+                            )
+
+                            if len(loadstring) <= 500:
+                                embed.add_field(
+                                    name="📋 Loadstring",
+                                    value=f"```lua\n{loadstring}\n```",
+                                    inline=False
+                                )
+                            else:
+                                preview = loadstring[:500]
+                                embed.add_field(
+                                    name="📋 Loadstring Preview",
+                                    value=f"```lua\n{preview}...\n```\n*Full script is {len(loadstring)} characters.*",
+                                    inline=False
+                                )
+
+                            embed.set_footer(text="Bypass Bot | Auto-Bypass")
+                            await message.author.send(embed=embed)
+
+                            if len(loadstring) > 500:
+                                await message.author.send(f"```lua\n{loadstring}\n```")
+
+                        elif result['type'] == 'url':
+                            bypassed_url = result['result']
+                            embed = discord.Embed(
+                                title="✅ Auto-Bypass: Link Bypassed",
+                                description=f"**Original Link:**\n`{detected_link[:100]}`\n\n**Bypassed Link:**\n`{bypassed_url}`\n\n⏱️ **Time Taken:** {result['time_taken']}s",
+                                color=discord.Color.green()
+                            )
+                            embed.set_footer(text="Bypass Bot | Auto-Bypass")
+                            await message.author.send(embed=embed)
+                    except:
                         await message.channel.send(
                             embed=discord.Embed(
-                                title="❌ DM Failed",
-                                description=f"{message.author.mention} - I couldn't send you a DM. Please enable DMs from server members.",
+                                description=f"❌ {message.author.mention} - I couldn't DM you. Please enable DMs from server members.",
                                 color=discord.Color.red()
                             ).set_footer(text="Bypass Bot"),
                             delete_after=15
                         )
                 else:
-                    try:
-                        await message.author.send(
-                            embed=discord.Embed(
-                                title="❌ Auto-Bypass Failed",
-                                description=f"Failed to bypass your link.\n\n**Error:** {result['error'][:200]}",
-                                color=discord.Color.red()
-                            ).set_footer(text="Bypass Bot")
-                        )
-                    except:
-                        pass
-            else:
-                try:
-                    await message.delete()
-                    await message.channel.send(
-                        embed=discord.Embed(
-                            description=f"❌ {message.author.mention} - No valid link detected in your message.",
-                            color=discord.Color.red()
-                        ).set_footer(text="Bypass Bot"),
-                        delete_after=10
-                    )
-                except:
-                    pass
+                    if result.get('is_junkie'):
+                        try:
+                            await message.delete()
+                            await message.channel.send(
+                                embed=discord.Embed(
+                                    description=f"🚫 {message.author.mention} - Junkie links are not supported anymore",
+                                    color=discord.Color.red()
+                                ).set_footer(text="Bypass Bot"),
+                                delete_after=15
+                            )
+                        except:
+                            pass
+                    else:
+                        try:
+                            await message.author.send(
+                                embed=discord.Embed(
+                                    title="❌ Auto-Bypass Failed",
+                                    description=f"Failed to bypass your link.\n\n**Error:** {result['error'][:200]}",
+                                    color=discord.Color.red()
+                                ).set_footer(text="Bypass Bot")
+                            )
+                        except:
+                            pass
 
 if __name__ == "__main__":
     print("🚀 Starting Bypass Bot...")
