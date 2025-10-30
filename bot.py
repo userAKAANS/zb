@@ -1,6 +1,7 @@
 import discord
 from discord import app_commands
 from discord.ui import Modal, TextInput, View, Button
+from discord.ext import tasks
 import aiohttp
 import os
 from dotenv import load_dotenv, set_key
@@ -31,6 +32,9 @@ AUTOBYPASS_FILE = 'autobypass_channels.json'
 STATS_FILE = 'bypass_stats.json'
 LOG_CHANNELS_FILE = 'log_channels.json'
 SERVICE_PREFERENCES_FILE = 'service_preferences.json'
+PANEL_MESSAGES_FILE = 'panel_messages.json'
+
+bot_start_time = None
 
 def load_log_channels():
     try:
@@ -67,13 +71,7 @@ def save_autobypass_channels(channels):
         print(f"Error saving autobypass channels: {e}")
 
 def load_stats():
-    try:
-        if os.path.exists(STATS_FILE):
-            with open(STATS_FILE, 'r') as f:
-                return json.load(f)
-    except Exception as e:
-        print(f"Error loading stats: {e}")
-    return {
+    defaults = {
         'total_bypassed': 0,
         'loadstrings': 0,
         'urls': 0,
@@ -83,6 +81,19 @@ def load_stats():
         'service_stats': {},
         'junkie_blocked': 0
     }
+    
+    try:
+        if os.path.exists(STATS_FILE):
+            with open(STATS_FILE, 'r') as f:
+                loaded_stats = json.load(f)
+                for key in defaults:
+                    if key not in loaded_stats:
+                        loaded_stats[key] = defaults[key]
+                return loaded_stats
+    except Exception as e:
+        print(f"Error loading stats: {e}")
+    
+    return defaults
 
 def save_stats(stats):
     try:
@@ -107,9 +118,48 @@ def save_service_preferences(preferences):
     except Exception as e:
         print(f"Error saving service preferences: {e}")
 
+def load_panel_messages():
+    try:
+        if os.path.exists(PANEL_MESSAGES_FILE):
+            with open(PANEL_MESSAGES_FILE, 'r') as f:
+                data = json.load(f)
+                return {int(k): int(v) for k, v in data.items()}
+    except Exception as e:
+        print(f"Error loading panel messages: {e}")
+    return {}
+
+def save_panel_messages(messages):
+    try:
+        with open(PANEL_MESSAGES_FILE, 'w') as f:
+            json.dump({str(k): v for k, v in messages.items()}, f, indent=2)
+    except Exception as e:
+        print(f"Error saving panel messages: {e}")
+
+def get_uptime():
+    if bot_start_time is None:
+        return "Not available"
+    
+    elapsed = datetime.now() - bot_start_time
+    days = elapsed.days
+    hours, remainder = divmod(elapsed.seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    
+    parts = []
+    if days > 0:
+        parts.append(f"{days}d")
+    if hours > 0:
+        parts.append(f"{hours}h")
+    if minutes > 0:
+        parts.append(f"{minutes}m")
+    if seconds > 0 or not parts:
+        parts.append(f"{seconds}s")
+    
+    return " ".join(parts)
+
 autobypass_channels = load_autobypass_channels()
 bypass_stats = load_stats()
 log_channels = load_log_channels()
+panel_messages = load_panel_messages()
 
 ai_service = AIService(OPENAI_API_KEY) if OPENAI_API_KEY else None
 cache_manager = CacheManager(ttl_minutes=30)
@@ -1192,20 +1242,41 @@ class BypassBot(discord.Client):
     async def setup_hook(self):
         await self.tree.sync()
         print(f"✅ Synced commands for {self.user}")
+        self.update_status.start()
+    
+    @tasks.loop(seconds=60)
+    async def update_status(self):
+        if self.user and bot_start_time:
+            uptime_str = get_uptime()
+            activity = discord.Streaming(
+                name=f"/bypass | {len(self.guilds)} servers | Uptime: {uptime_str}",
+                url="https://www.twitch.tv/bypass"
+            )
+            await self.change_presence(activity=activity, status=discord.Status.online)
+    
+    @update_status.before_loop
+    async def before_update_status(self):
+        await self.wait_until_ready()
 
 bot = BypassBot()
 
 @bot.event
 async def on_ready():
+    global bot_start_time
+    if bot_start_time is None:
+        bot_start_time = datetime.now()
+    
     if bot.user:
+        uptime_str = get_uptime()
         activity = discord.Streaming(
-            name=f"/bypass | {len(bot.guilds)} servers",
+            name=f"/bypass | {len(bot.guilds)} servers | Uptime: {uptime_str}",
             url="https://www.twitch.tv/bypass"
         )
         await bot.change_presence(activity=activity, status=discord.Status.online)
         print(f"✅ {bot.user.name} is online!")
         print(f"🌐 Connected to {len(bot.guilds)} servers")
         print(f"👥 Serving {sum(g.member_count for g in bot.guilds if g.member_count)} users")
+        print(f"⏱️ Bot started at: {bot_start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
 @bot.tree.command(name="bypass", description="Open the link bypass modal")
 async def bypass_command(interaction: discord.Interaction):
@@ -1298,6 +1369,12 @@ async def info_command(interaction: discord.Interaction):
     )
 
     embed.add_field(
+        name="⏱️ Bot Uptime",
+        value=f"**Running for:** {get_uptime()}\n**Started:** <t:{int(bot_start_time.timestamp())}:R>" if bot_start_time else "**Status:** Starting up...",
+        inline=False
+    )
+
+    embed.add_field(
         name="🔧 User Commands",
         value="`/bypass` - Bypass a link\n`/info` - Bot information\n`/supported` - View supported services\n`/stats` - View bot statistics",
         inline=False
@@ -1354,7 +1431,16 @@ async def stats_command(interaction: discord.Interaction):
             inline=False
         )
 
+    embed.add_field(
+        name="⏱️ Bot Uptime",
+        value=f"**Running for:** {get_uptime()}\n**Started:** <t:{int(bot_start_time.timestamp())}:R>" if bot_start_time else "**Status:** Starting up...",
+        inline=False
+    )
+
     embed.set_footer(text="Bypass Bot | Statistics")
+    if bot.user:
+        embed.set_thumbnail(url=bot.user.display_avatar.url)
+    
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="status", description="View service status for all supported games/services")
@@ -1469,7 +1555,7 @@ async def setstatus_command(interaction: discord.Interaction, service: str, stat
         ephemeral=True
     )
 
-@bot.tree.command(name="panel", description="[ADMIN] Create a bypass panel with a button")
+@bot.tree.command(name="panel", description="[ADMIN] Create or update a bypass panel with a button")
 async def panel_command(interaction: discord.Interaction):
     if not isinstance(interaction.user, discord.Member) or not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message(
@@ -1482,29 +1568,79 @@ async def panel_command(interaction: discord.Interaction):
         )
         return
 
+    if not interaction.channel or not isinstance(interaction.channel, (discord.TextChannel, discord.Thread)):
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Error",
+                description="This command can only be used in text channels.",
+                color=discord.Color.red()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+        return
+
+    uptime_str = get_uptime()
     panel_embed = discord.Embed(
         title="🔓 Bypass Panel",
         description="Click the button below to bypass a link!\n\n**Features:**\n• Fast bypass processing\n• Smart caching system\n• 50+ supported services\n• AI-powered safety analysis\n• Private results (only you can see)\n\nYour bypass results will be sent as a private message that only you can see.",
         color=discord.Color.blue()
     )
-    panel_embed.set_footer(text="Bypass Bot | Click the button to get started")
+    
+    footer_text = f"Bypass Bot | Uptime: {uptime_str}"
+    panel_embed.set_footer(text=footer_text)
 
     if bot.user and bot.user.display_avatar:
         panel_embed.set_thumbnail(url=bot.user.display_avatar.url)
 
     view = BypassPanelView()
 
-    await interaction.response.send_message(
-        embed=discord.Embed(
-            title="✅ Panel Created",
-            description="Bypass panel has been created successfully!",
-            color=discord.Color.green()
-        ).set_footer(text="Bypass Bot"),
-        ephemeral=True
-    )
-
-    if interaction.channel and isinstance(interaction.channel, (discord.TextChannel, discord.Thread)):
-        await interaction.channel.send(embed=panel_embed, view=view)
+    channel_id = interaction.channel.id
+    global panel_messages
+    
+    existing_message_id = panel_messages.get(channel_id)
+    
+    try:
+        if existing_message_id:
+            try:
+                existing_message = await interaction.channel.fetch_message(existing_message_id)
+                await existing_message.edit(embed=panel_embed, view=view)
+                
+                await interaction.response.send_message(
+                    embed=discord.Embed(
+                        title="✅ Panel Updated",
+                        description="The existing bypass panel has been updated with the latest information!",
+                        color=discord.Color.green()
+                    ).set_footer(text="Bypass Bot"),
+                    ephemeral=True
+                )
+                return
+            except discord.NotFound:
+                pass
+        
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="✅ Panel Created",
+                description="Bypass panel has been created successfully!",
+                color=discord.Color.green()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+        
+        panel_message = await interaction.channel.send(embed=panel_embed, view=view)
+        
+        panel_messages[channel_id] = panel_message.id
+        save_panel_messages(panel_messages)
+        
+    except Exception as e:
+        print(f"Error in panel command: {e}")
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Error",
+                description=f"An error occurred while creating the panel: {str(e)}",
+                color=discord.Color.red()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
 
 @bot.tree.command(name="autobypass", description="Enable auto-bypass in a channel")
 @app_commands.describe(channel="The channel to enable autobypass in")
