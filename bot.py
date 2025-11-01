@@ -26,6 +26,7 @@ load_dotenv()
 
 DISCORD_BOT_TOKEN = os.getenv('DISCORD_BOT_TOKEN')
 BYPASS_API_KEY = os.getenv('BYPASS_API_KEY')
+TRW_API_KEY = os.getenv('TRW_API_KEY')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 BOT_OWNER_ID = int(os.getenv('BOT_OWNER_ID', 0))
 
@@ -179,7 +180,7 @@ cache_manager = CacheManager(ttl_minutes=30)
 rate_limiter = RateLimiter(max_requests=10, time_window=60)
 hwid_service = HWIDService()
 user_activity = UserActivity()
-bypass_provider = BypassProvider()
+bypass_provider = BypassProvider(BYPASS_API_KEY, TRW_API_KEY)
 
 SUPPORTED_SERVICES = [
     "codex", "trigon", "rekonise", "linkvertise", "paster-so", "cuttlinks",
@@ -678,7 +679,7 @@ class BypassModal(Modal):
         loading_embed = discord.Embed(
             title=f"{service_emoji} Bypassing {service_name.title()}",
             description=
-            f"⏳ **Processing your link...**\n\n`{link_to_bypass[:80]}{'...' if len(link_to_bypass) > 80 else ''}`\n\n🕐 **Elapsed:** 0.0s",
+            f":loading: **Processing your link...**\n\n`{link_to_bypass[:80]}{'...' if len(link_to_bypass) > 80 else ''}`\n\n🕐 **Elapsed:** 0.0s",
             color=discord.Color.blue())
         loading_embed.set_footer(text="Bypass Bot • Hang tight!")
 
@@ -697,7 +698,7 @@ class BypassModal(Modal):
             for i in range(30):
                 await asyncio.sleep(0.5)
                 elapsed = round(time.time() - start_time, 1)
-                loading_embed.description = f"⏳ **Processing your link...**\n\n`{link_to_bypass[:80]}{'...' if len(link_to_bypass) > 80 else ''}`\n\n🕐 **Elapsed:** {elapsed}s"
+                loading_embed.description = f":loading: **Processing your link...**\n\n`{link_to_bypass[:80]}{'...' if len(link_to_bypass) > 80 else ''}`\n\n🕐 **Elapsed:** {elapsed}s"
                 try:
                     await interaction.edit_original_response(
                         embed=loading_embed)
@@ -806,7 +807,7 @@ class PanelBypassModal(Modal):
         loading_embed = discord.Embed(
             title=f"{service_emoji} Bypassing {service_name.title()}",
             description=
-            f"⏳ **Processing your link...**\n\n`{link_to_bypass[:80]}{'...' if len(link_to_bypass) > 80 else ''}`\n\n🕐 **Elapsed:** 0.0s",
+            f":loading: **Processing your link...**\n\n`{link_to_bypass[:80]}{'...' if len(link_to_bypass) > 80 else ''}`\n\n🕐 **Elapsed:** 0.0s",
             color=discord.Color.blue())
         loading_embed.set_footer(text="Bypass Bot • Hang tight!")
 
@@ -825,7 +826,7 @@ class PanelBypassModal(Modal):
             for i in range(30):
                 await asyncio.sleep(0.5)
                 elapsed = round(time.time() - start_time, 1)
-                loading_embed.description = f"⏳ **Processing your link...**\n\n`{link_to_bypass[:80]}{'...' if len(link_to_bypass) > 80 else ''}`\n\n🕐 **Elapsed:** {elapsed}s"
+                loading_embed.description = f":loading: **Processing your link...**\n\n`{link_to_bypass[:80]}{'...' if len(link_to_bypass) > 80 else ''}`\n\n🕐 **Elapsed:** {elapsed}s"
                 try:
                     await interaction.edit_original_response(
                         embed=loading_embed)

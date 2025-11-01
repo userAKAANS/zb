@@ -4,22 +4,31 @@ import os
 from typing import Optional, Dict
 
 class BypassProvider:
-    def __init__(self):
-        pass
+    def __init__(self, bypass_api_key: Optional[str] = None, trw_api_key: Optional[str] = None):
+        self.bypass_api_key = bypass_api_key or os.getenv('BYPASS_API_KEY')
+        self.trw_api_key = trw_api_key or os.getenv('TRW_API_KEY')
     
     async def bypass(self, link: str, session: aiohttp.ClientSession, timeout: int = 30) -> dict:
         encoded_link = quote(link)
-        ace_api_key = os.getenv('BYPASS_API_KEY')
         
-        if ace_api_key:
-            ace_url = f"http://ace-bypass.com/api/bypass?url={encoded_link}&apikey={ace_api_key}"
+        # Try Ace Bypass first if API key is available
+        if self.bypass_api_key:
+            ace_url = f"http://ace-bypass.com/api/bypass?url={encoded_link}&apikey={self.bypass_api_key}"
             result = await self._try_api(ace_url, session, timeout, 'Ace Bypass')
             if result['success']:
                 return result
         
-        trw_url = f"https://trw.lat/api/bypass?url={encoded_link}&apikey=4b726d90-ebeb-4b89-9832-c4532eba994"
-        result = await self._try_api(trw_url, session, timeout, 'TRW Bypass')
-        return result
+        # Fallback to TRW Bypass
+        if self.trw_api_key:
+            trw_url = f"https://trw.lat/api/bypass?url={encoded_link}&apikey={self.trw_api_key}"
+            result = await self._try_api(trw_url, session, timeout, 'TRW Bypass')
+            return result
+        
+        return {
+            'success': False,
+            'error': 'No API keys configured for bypass services',
+            'api_name': 'None'
+        }
     
     async def _try_api(self, api_url: str, session: aiohttp.ClientSession, timeout: int, api_name: str) -> dict:
         try:
@@ -55,8 +64,6 @@ class BypassProvider:
             }
     
     def get_api_status(self) -> dict:
-        ace_api_key = os.getenv('BYPASS_API_KEY')
-        
         status = {
             'active': 'Ace Bypass (with TRW fallback)',
             'providers': {
@@ -64,15 +71,15 @@ class BypassProvider:
                     'name': 'Ace Bypass',
                     'enabled': True,
                     'requires_key': True,
-                    'has_key': bool(ace_api_key),
-                    'ready': bool(ace_api_key)
+                    'has_key': bool(self.bypass_api_key),
+                    'ready': bool(self.bypass_api_key)
                 },
                 'trw-bypass': {
                     'name': 'TRW Bypass',
                     'enabled': True,
-                    'requires_key': False,
-                    'has_key': True,
-                    'ready': True
+                    'requires_key': True,
+                    'has_key': bool(self.trw_api_key),
+                    'ready': bool(self.trw_api_key)
                 }
             }
         }
