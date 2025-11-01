@@ -20,6 +20,7 @@ from cache_manager import CacheManager
 from rate_limiter import RateLimiter
 from hwid_service import HWIDService
 from user_activity import UserActivity
+from bypass_provider import BypassProvider
 
 load_dotenv()
 
@@ -166,6 +167,7 @@ cache_manager = CacheManager(ttl_minutes=30)
 rate_limiter = RateLimiter(max_requests=10, time_window=60)
 hwid_service = HWIDService()
 user_activity = UserActivity()
+bypass_provider = BypassProvider()
 
 SUPPORTED_SERVICES = [
     "codex", "trigon", "rekonise", "linkvertise", "paster-so", "cuttlinks",
@@ -447,103 +449,99 @@ async def bypass_link(link: str, use_cache: bool = True) -> dict:
 
     try:
         async with aiohttp.ClientSession() as session:
-            api_url = f'http://ace-bypass.com/api/bypass?url={quote(link)}&apikey={BYPASS_API_KEY}'
-
-            async with session.get(
-                api_url,
-                timeout=aiohttp.ClientTimeout(total=30)
-            ) as response:
-                time_taken = round(time.time() - start_time, 2)
-
-                if response.status == 200:
-                    data = await response.json()
-
-                    loadstring = data.get('loadstring') or data.get('script') or data.get('code')
-                    bypassed_url = data.get('destination') or data.get('result') or data.get('bypassed_url') or data.get('url')
-
-                    if contains_junkie(str(loadstring)) or contains_junkie(str(bypassed_url)):
-                        bypass_stats['junkie_blocked'] = bypass_stats.get('junkie_blocked', 0) + 1
-                        save_stats(bypass_stats)
-                        return {
-                            'success': False,
-                            'error': 'Junkie links are not supported anymore',
-                            'is_junkie': True,
-                            'time_taken': time_taken,
-                            'from_cache': False
-                        }
-
-                    result = None
-                    if loadstring:
-                        bypass_stats['total_bypassed'] += 1
-                        bypass_stats['loadstrings'] += 1
-                        service = get_service_name(link)
-                        bypass_stats['service_stats'][service] = bypass_stats['service_stats'].get(service, 0) + 1
-                        save_stats(bypass_stats)
-
-                        result = {
-                            'success': True,
-                            'type': 'loadstring',
-                            'result': loadstring,
-                            'original_link': link,
-                            'time_taken': time_taken,
-                            'from_cache': False
-                        }
-                    elif bypassed_url:
-                        if bypassed_url.lower().startswith(('loadstring(', 'game:', 'local ', 'function ', 'return ')):
-                            bypass_stats['total_bypassed'] += 1
-                            bypass_stats['loadstrings'] += 1
-                            service = get_service_name(link)
-                            bypass_stats['service_stats'][service] = bypass_stats['service_stats'].get(service, 0) + 1
-                            save_stats(bypass_stats)
-
-                            result = {
-                                'success': True,
-                                'type': 'loadstring',
-                                'result': bypassed_url,
-                                'original_link': link,
-                                'time_taken': time_taken,
-                                'from_cache': False
-                            }
-                        else:
-                            bypass_stats['total_bypassed'] += 1
-                            bypass_stats['urls'] += 1
-                            service = get_service_name(link)
-                            bypass_stats['service_stats'][service] = bypass_stats['service_stats'].get(service, 0) + 1
-                            save_stats(bypass_stats)
-
-                            result = {
-                                'success': True,
-                                'type': 'url',
-                                'result': bypassed_url,
-                                'original_link': link,
-                                'time_taken': time_taken,
-                                'from_cache': False
-                            }
-
-                    if result and use_cache:
-                        cache_manager.set(link, result)
-
-                    if result:
-                        return result
-                    else:
-                        bypass_stats['failed'] += 1
-                        save_stats(bypass_stats)
-                        return {
-                            'success': False,
-                            'error': f'No result from API: {str(data)[:200]}',
-                            'time_taken': time_taken,
-                            'from_cache': False
-                        }
-                else:
-                    bypass_stats['failed'] += 1
+            api_response = await bypass_provider.bypass(link, session)
+            time_taken = round(time.time() - start_time, 2)
+            
+            if not api_response['success']:
+                bypass_stats['failed'] += 1
+                save_stats(bypass_stats)
+                return {
+                    'success': False,
+                    'error': api_response.get('error', 'Unknown error'),
+                    'time_taken': time_taken,
+                    'from_cache': False,
+                    'api_name': api_response.get('api_name')
+                }
+            
+            loadstring = api_response.get('loadstring')
+            bypassed_url = api_response.get('bypassed_url')
+            
+            if contains_junkie(str(loadstring)) or contains_junkie(str(bypassed_url)):
+                bypass_stats['junkie_blocked'] = bypass_stats.get('junkie_blocked', 0) + 1
+                save_stats(bypass_stats)
+                return {
+                    'success': False,
+                    'error': 'Junkie links are not supported anymore',
+                    'is_junkie': True,
+                    'time_taken': time_taken,
+                    'from_cache': False
+                }
+            
+            result = None
+            if loadstring:
+                bypass_stats['total_bypassed'] += 1
+                bypass_stats['loadstrings'] += 1
+                service = get_service_name(link)
+                bypass_stats['service_stats'][service] = bypass_stats['service_stats'].get(service, 0) + 1
+                save_stats(bypass_stats)
+                
+                result = {
+                    'success': True,
+                    'type': 'loadstring',
+                    'result': loadstring,
+                    'original_link': link,
+                    'time_taken': time_taken,
+                    'from_cache': False,
+                    'api_name': api_response.get('api_name')
+                }
+            elif bypassed_url:
+                if bypassed_url.lower().startswith(('loadstring(', 'game:', 'local ', 'function ', 'return ')):
+                    bypass_stats['total_bypassed'] += 1
+                    bypass_stats['loadstrings'] += 1
+                    service = get_service_name(link)
+                    bypass_stats['service_stats'][service] = bypass_stats['service_stats'].get(service, 0) + 1
                     save_stats(bypass_stats)
-                    error_text = await response.text()
-                    return {
-                        'success': False,
-                        'error': f'API error {response.status}: {error_text[:200]}',
+                    
+                    result = {
+                        'success': True,
+                        'type': 'loadstring',
+                        'result': bypassed_url,
+                        'original_link': link,
                         'time_taken': time_taken,
-                        'from_cache': False
+                        'from_cache': False,
+                        'api_name': api_response.get('api_name')
                     }
+                else:
+                    bypass_stats['total_bypassed'] += 1
+                    bypass_stats['urls'] += 1
+                    service = get_service_name(link)
+                    bypass_stats['service_stats'][service] = bypass_stats['service_stats'].get(service, 0) + 1
+                    save_stats(bypass_stats)
+                    
+                    result = {
+                        'success': True,
+                        'type': 'url',
+                        'result': bypassed_url,
+                        'original_link': link,
+                        'time_taken': time_taken,
+                        'from_cache': False,
+                        'api_name': api_response.get('api_name')
+                    }
+            
+            if result and use_cache:
+                cache_manager.set(link, result)
+            
+            if result:
+                return result
+            else:
+                bypass_stats['failed'] += 1
+                save_stats(bypass_stats)
+                return {
+                    'success': False,
+                    'error': f'No result from API',
+                    'time_taken': time_taken,
+                    'from_cache': False
+                }
     except Exception as e:
         bypass_stats['failed'] += 1
         save_stats(bypass_stats)
@@ -999,10 +997,79 @@ class EmbedModal(Modal):
         if interaction.channel and isinstance(interaction.channel, (discord.TextChannel, discord.Thread)):
             await interaction.channel.send(embed=embed)
 
+class SwitchAPIView(View):
+    def __init__(self):
+        super().__init__(timeout=180)
+        
+        ace_button = Button(
+            label="Ace Bypass",
+            style=discord.ButtonStyle.primary,
+            custom_id="switch_ace_bypass"
+        )
+        ace_button.callback = self.switch_to_ace
+        
+        trw_button = Button(
+            label="TRW.lat",
+            style=discord.ButtonStyle.success,
+            custom_id="switch_trw_lat"
+        )
+        trw_button.callback = self.switch_to_trw
+        
+        self.add_item(ace_button)
+        self.add_item(trw_button)
+    
+    async def switch_to_ace(self, interaction: discord.Interaction):
+        if bypass_provider.set_active_api('ace-bypass'):
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    title="✅ API Switched",
+                    description="Now using **Ace Bypass** API for link bypassing.",
+                    color=discord.Color.green()
+                ),
+                ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    title="❌ Error",
+                    description="Failed to switch to Ace Bypass API.",
+                    color=discord.Color.red()
+                ),
+                ephemeral=True
+            )
+    
+    async def switch_to_trw(self, interaction: discord.Interaction):
+        if bypass_provider.set_active_api('trw-lat'):
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    title="✅ API Switched",
+                    description="Now using **TRW.lat** API for link bypassing.",
+                    color=discord.Color.green()
+                ),
+                ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    title="❌ Error",
+                    description="Failed to switch to TRW.lat API.",
+                    color=discord.Color.red()
+                ),
+                ephemeral=True
+            )
+
 class ConfigModal(Modal):
-    bypass_api_key_input = TextInput(
-        label='Bypass API Key',
-        placeholder='Enter your Bypass API key',
+    ace_bypass_key_input = TextInput(
+        label='Ace Bypass API Key',
+        placeholder='Enter your Ace Bypass API key',
+        required=False,
+        style=discord.TextStyle.short,
+        max_length=200
+    )
+
+    trw_api_key_input = TextInput(
+        label='TRW.lat API Key (if required)',
+        placeholder='Leave empty if not required',
         required=False,
         style=discord.TextStyle.short,
         max_length=200
@@ -1020,18 +1087,26 @@ class ConfigModal(Modal):
         super().__init__(title='⚙️ Configure API Keys')
 
     async def on_submit(self, interaction: discord.Interaction):
-        bypass_key = self.bypass_api_key_input.value.strip()
+        ace_key = self.ace_bypass_key_input.value.strip()
+        trw_key = self.trw_api_key_input.value.strip()
         openai_key = self.openai_api_key_input.value.strip()
 
         env_file = '.env'
         updated = []
 
-        if bypass_key:
-            set_key(env_file, 'BYPASS_API_KEY', bypass_key)
-            os.environ['BYPASS_API_KEY'] = bypass_key
-            global BYPASS_API_KEY
-            BYPASS_API_KEY = bypass_key
-            updated.append('Bypass API Key')
+        if ace_key:
+            set_key(env_file, 'BYPASS_API_KEY', ace_key)
+            os.environ['BYPASS_API_KEY'] = ace_key
+            global BYPASS_API_KEY, bypass_provider
+            BYPASS_API_KEY = ace_key
+            bypass_provider.set_api_key('ace-bypass', ace_key)
+            updated.append('Ace Bypass API Key')
+
+        if trw_key:
+            set_key(env_file, 'TRW_API_KEY', trw_key)
+            os.environ['TRW_API_KEY'] = trw_key
+            bypass_provider.set_api_key('trw-lat', trw_key)
+            updated.append('TRW.lat API Key')
 
         if openai_key:
             set_key(env_file, 'OPENAI_API_KEY', openai_key)
@@ -1045,7 +1120,7 @@ class ConfigModal(Modal):
             await interaction.response.send_message(
                 embed=discord.Embed(
                     title="✅ Configuration Updated",
-                    description=f"Successfully updated: {', '.join(updated)}\n\nRestart the bot for changes to take full effect.",
+                    description=f"Successfully updated: {', '.join(updated)}\n\nChanges are applied immediately. Use /switchapi to switch between providers.",
                     color=discord.Color.green()
                 ).set_footer(text="Bypass Bot"),
                 ephemeral=True
@@ -1326,6 +1401,45 @@ async def config_command(interaction: discord.Interaction):
         return
 
     await interaction.response.send_modal(ConfigModal())
+
+@bot.tree.command(name="switchapi", description="[OWNER] Switch between bypass API providers")
+async def switchapi_command(interaction: discord.Interaction):
+    if interaction.user.id != BOT_OWNER_ID:
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Access Denied",
+                description="This command is only available to the bot owner.",
+                color=discord.Color.red()
+            ),
+            ephemeral=True
+        )
+        return
+    
+    api_status = bypass_provider.get_api_status()
+    current_api = api_status['active']
+    providers = api_status['providers']
+    
+    embed = discord.Embed(
+        title="🔄 API Provider Status",
+        description="Current bypass API providers and their status:",
+        color=discord.Color.blue()
+    )
+    
+    for api_name, info in providers.items():
+        status_emoji = "✅" if api_name == current_api else "⚪"
+        ready_emoji = "🟢" if info['ready'] else "🔴"
+        key_status = "✓" if info['has_key'] else "✗" if info['requires_key'] else "N/A"
+        
+        embed.add_field(
+            name=f"{status_emoji} {info['name']}",
+            value=f"**Status:** {ready_emoji} {'Ready' if info['ready'] else 'Not Ready'}\n**API Key:** {key_status}\n**Active:** {'Yes' if api_name == current_api else 'No'}",
+            inline=True
+        )
+    
+    embed.set_footer(text="Use the buttons below to switch providers")
+    
+    view = SwitchAPIView()
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 @bot.tree.command(name="services", description="[ADMIN] Toggle bypass services on/off")
 async def services_command(interaction: discord.Interaction):
