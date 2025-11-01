@@ -721,13 +721,21 @@ class BypassModal(Modal):
 
             cache_indicator = "⚡ From Cache" if result.get(
                 'from_cache') else "✨ Fresh Result"
+            
+            api_used = result.get('api_name', 'Unknown')
+            api_info = f"🔧 **API Used:** {api_used}"
+            
+            is_work_ink = 'work.ink' in link_to_bypass.lower() or 'work-ink' in service_name.lower()
+            work_ink_note = ""
+            if is_work_ink:
+                work_ink_note = f"\n\n⚠️ **Work.ink Links:** Download the userscript at https://discord.com/channels/1407273561739100201/1434320055729917963\nThere is a tutorial available!"
 
             if result['type'] == 'loadstring':
                 loadstring = result['result']
                 embed = discord.Embed(
                     title="✅ Loadstring Retrieved Successfully",
                     description=
-                    f"**Original Link:**\n`{link_to_bypass[:100]}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}\n\n💡 **Click the button below to copy the full loadstring!**",
+                    f"**Original Link:**\n`{link_to_bypass[:100]}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}\n{api_info}{work_ink_note}\n\n💡 **Click the button below to copy the full loadstring!**",
                     color=discord.Color.green())
 
                 if len(loadstring) <= 500:
@@ -753,7 +761,7 @@ class BypassModal(Modal):
                 embed = discord.Embed(
                     title="✅ Link Bypassed Successfully",
                     description=
-                    f"**Original Link:**\n`{link_to_bypass[:100]}`\n\n**Bypassed Link:**\n`{bypassed_url}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}",
+                    f"**Original Link:**\n`{link_to_bypass[:100]}`\n\n**Bypassed Link:**\n`{bypassed_url}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}\n{api_info}{work_ink_note}",
                     color=discord.Color.green())
                 embed.set_footer(text="Bypass Bot | Only you can see this")
 
@@ -849,13 +857,21 @@ class PanelBypassModal(Modal):
 
             cache_indicator = "⚡ From Cache" if result.get(
                 'from_cache') else "✨ Fresh Result"
+            
+            api_used = result.get('api_name', 'Unknown')
+            api_info = f"🔧 **API Used:** {api_used}"
+            
+            is_work_ink = 'work.ink' in link_to_bypass.lower() or 'work-ink' in service_name.lower()
+            work_ink_note = ""
+            if is_work_ink:
+                work_ink_note = f"\n\n⚠️ **Work.ink Links:** Download the userscript at https://discord.com/channels/1407273561739100201/1434320055729917963\nThere is a tutorial available!"
 
             if result['type'] == 'loadstring':
                 loadstring = result['result']
                 embed = discord.Embed(
                     title="✅ Loadstring Retrieved Successfully",
                     description=
-                    f"**Original Link:**\n`{link_to_bypass[:100]}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}\n\n💡 **Click the button below to copy the full loadstring!**",
+                    f"**Original Link:**\n`{link_to_bypass[:100]}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}\n{api_info}{work_ink_note}\n\n💡 **Click the button below to copy the full loadstring!**",
                     color=discord.Color.green())
 
                 if len(loadstring) <= 500:
@@ -881,7 +897,7 @@ class PanelBypassModal(Modal):
                 embed = discord.Embed(
                     title="✅ Link Bypassed Successfully",
                     description=
-                    f"**Original Link:**\n`{link_to_bypass[:100]}`\n\n**Bypassed Link:**\n`{bypassed_url}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}",
+                    f"**Original Link:**\n`{link_to_bypass[:100]}`\n\n**Bypassed Link:**\n`{bypassed_url}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}\n{api_info}{work_ink_note}",
                     color=discord.Color.green())
                 embed.set_footer(text="Bypass Bot | Only you can see this")
 
@@ -2073,6 +2089,14 @@ async def on_message(message: discord.Message):
 
                         cache_indicator = "⚡ From Cache" if result.get(
                             'from_cache') else "✨ Fresh Result"
+                        
+                        api_used = result.get('api_name', 'Unknown')
+                        api_info = f"🔧 **API Used:** {api_used}"
+                        
+                        is_work_ink = 'work.ink' in detected_link.lower() or 'work-ink' in service_name.lower()
+                        work_ink_note = ""
+                        if is_work_ink:
+                            work_ink_note = f"\n\n⚠️ **Work.ink Links:** Download the userscript at https://discord.com/channels/1407273561739100201/1434320055729917963\nThere is a tutorial available!"
 
                         if result['type'] == 'loadstring':
                             loadstring = result['result']
@@ -2080,7 +2104,7 @@ async def on_message(message: discord.Message):
                                 title=
                                 f"{service_emoji} Auto-Bypass: {service_name.title()} Loadstring",
                                 description=
-                                f"**Original Link:**\n`{detected_link[:100]}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}",
+                                f"**Original Link:**\n`{detected_link[:100]}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}\n{api_info}{work_ink_note}",
                                 color=discord.Color.green())
 
                             if len(loadstring) <= 500:
@@ -2109,7 +2133,7 @@ async def on_message(message: discord.Message):
                                 title=
                                 f"{service_emoji} Auto-Bypass: {service_name.title()} Link",
                                 description=
-                                f"**Original Link:**\n`{detected_link[:100]}`\n\n**Bypassed Link:**\n`{bypassed_url}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}",
+                                f"**Original Link:**\n`{detected_link[:100]}`\n\n**Bypassed Link:**\n`{bypassed_url}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}\n{api_info}{work_ink_note}",
                                 color=discord.Color.green())
                             embed.set_footer(text="Bypass Bot | Auto-Bypass")
                             await message.author.send(embed=embed)

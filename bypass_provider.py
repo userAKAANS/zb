@@ -63,6 +63,13 @@ class BypassProvider:
                 'api_name': api_name
             }
     
+    def set_api_key(self, provider: str, api_key: str):
+        """Update API key for a specific provider"""
+        if provider == 'ace-bypass':
+            self.bypass_api_key = api_key
+        elif provider == 'trw-lat':
+            self.trw_api_key = api_key
+    
     def get_api_status(self) -> dict:
         status = {
             'active': 'Ace Bypass (with TRW fallback)',
