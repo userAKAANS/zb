@@ -13,7 +13,10 @@ A Discord bot that bypasses link shorteners and script protection services with 
 - DM-based results for privacy
 - Server-side message cleanup
 
-## Recent Changes
+## Recent Changes (November 2025)
+- **Hardcoded TRW API as fallback**: TRW bypass API is now hardcoded as automatic fallback when Ace Bypass fails
+- **Removed commands**: Removed `/switchapi`, `/ban`, `/dm`, and `/purge` commands
+- **Simplified bypass provider**: Removed API switching UI, now uses Ace Bypass with automatic TRW fallback
 - Added service preferences system with toggle UI (owner-only)
 - Implemented paginated service toggle command `/services`
 - Service preferences persist across bot restarts
@@ -26,6 +29,7 @@ A Discord bot that bypasses link shorteners and script protection services with 
 
 ## Architecture
 - `bot.py` - Main bot logic with commands and event handlers
+- `bypass_provider.py` - Hardcoded bypass API provider with automatic fallback (Ace → TRW)
 - `user_rate_limiter.py` - User rate limiting with JSON persistence
 - `cache_manager.py` - Cache management for bypass results
 - `rate_limiter.py` - General rate limiting utilities
@@ -34,11 +38,13 @@ A Discord bot that bypasses link shorteners and script protection services with 
 - `user_activity.py` - User activity tracking and blacklisting
 
 ## Configuration
-Create a `.env` file with:
-- `DISCORD_BOT_TOKEN` - Your Discord bot token
-- `BYPASS_API_KEY` - API key for bypass service
-- `OPENAI_API_KEY` - (Optional) OpenAI API key
-- `BOT_OWNER_ID` - Your Discord user ID for owner notifications
+Required secrets (add via Replit Secrets):
+- `DISCORD_BOT_TOKEN` - Your Discord bot token (required)
+- `BYPASS_API_KEY` - API key for Ace Bypass service (optional, TRW is fallback)
+- `OPENAI_API_KEY` - OpenAI API key for AI features (optional)
+- `BOT_OWNER_ID` - Your Discord user ID for owner notifications (required)
+
+**Note**: TRW API is hardcoded as a fallback and does not require a separate API key.
 
 ## Commands
 - `/bypass <link>` - Bypass a link
