@@ -28,6 +28,7 @@ DISCORD_BOT_TOKEN = os.getenv('DISCORD_BOT_TOKEN')
 BYPASS_API_KEY = os.getenv('BYPASS_API_KEY')
 TRW_API_KEY = os.getenv('TRW_API_KEY')
 ZEN_API_KEY = os.getenv('ZEN_API_KEY')
+EAS_API_KEY = os.getenv('EAS_API_KEY')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 BOT_OWNER_ID = int(os.getenv('BOT_OWNER_ID', 0))
 
@@ -181,7 +182,7 @@ cache_manager = CacheManager(ttl_minutes=30)
 rate_limiter = RateLimiter(max_requests=10, time_window=60)
 hwid_service = HWIDService()
 user_activity = UserActivity()
-bypass_provider = BypassProvider(BYPASS_API_KEY, TRW_API_KEY, ZEN_API_KEY)
+bypass_provider = BypassProvider(BYPASS_API_KEY, TRW_API_KEY, ZEN_API_KEY, EAS_API_KEY)
 
 SUPPORTED_SERVICES = [
     "codex", "trigon", "rekonise", "linkvertise", "paster-so", "cuttlinks",
@@ -1036,33 +1037,33 @@ class ConfigModal(Modal):
         style=discord.TextStyle.short,
         max_length=200)
 
-    trw_api_key_input = TextInput(label='TRW.lat API Key (if required)',
-                                  placeholder='Leave empty if not required',
+    trw_api_key_input = TextInput(label='TRW API Key',
+                                  placeholder='Enter your TRW API key',
                                   required=False,
                                   style=discord.TextStyle.short,
                                   max_length=200)
 
-    zen_api_key_input = TextInput(label='ZEN API Key (if required)',
-                                  placeholder='Leave empty if not required',
+    zen_api_key_input = TextInput(label='ZEN API Key',
+                                  placeholder='Enter your ZEN API key',
                                   required=False,
                                   style=discord.TextStyle.short,
                                   max_length=200)
 
-    openai_api_key_input = TextInput(
-        label='OpenAI API Key',
-        placeholder='Enter your OpenAI API key (optional)',
+    eas_api_key_input = TextInput(
+        label='EAS-X API Key',
+        placeholder='Enter your EAS-X API key',
         required=False,
         style=discord.TextStyle.short,
         max_length=200)
 
     def __init__(self):
-        super().__init__(title='⚙️ Configure API Keys')
+        super().__init__(title='⚙️ Configure Bypass API Keys')
 
     async def on_submit(self, interaction: discord.Interaction):
         ace_key = self.ace_bypass_key_input.value.strip()
         trw_key = self.trw_api_key_input.value.strip()
         zen_key = self.zen_api_key_input.value.strip()
-        openai_key = self.openai_api_key_input.value.strip()
+        eas_key = self.eas_api_key_input.value.strip()
 
         env_file = '.env'
         updated = []
@@ -1073,15 +1074,15 @@ class ConfigModal(Modal):
             global BYPASS_API_KEY, bypass_provider
             BYPASS_API_KEY = ace_key
             bypass_provider.set_api_key('ace-bypass', ace_key)
-            updated.append('Ace Bypass API Key')
+            updated.append('Ace Bypass')
 
         if trw_key:
             set_key(env_file, 'TRW_API_KEY', trw_key)
             os.environ['TRW_API_KEY'] = trw_key
             global TRW_API_KEY
             TRW_API_KEY = trw_key
-            bypass_provider.set_api_key('trw-lat', trw_key)
-            updated.append('TRW.lat API Key')
+            bypass_provider.set_api_key('trw-bypass', trw_key)
+            updated.append('TRW Bypass')
 
         if zen_key:
             set_key(env_file, 'ZEN_API_KEY', zen_key)
@@ -1089,21 +1090,21 @@ class ConfigModal(Modal):
             global ZEN_API_KEY
             ZEN_API_KEY = zen_key
             bypass_provider.set_api_key('zen-bypass', zen_key)
-            updated.append('ZEN API Key')
+            updated.append('ZEN Bypass')
 
-        if openai_key:
-            set_key(env_file, 'OPENAI_API_KEY', openai_key)
-            os.environ['OPENAI_API_KEY'] = openai_key
-            global OPENAI_API_KEY, ai_service
-            OPENAI_API_KEY = openai_key
-            ai_service = AIService(openai_key)
-            updated.append('OpenAI API Key')
+        if eas_key:
+            set_key(env_file, 'EAS_API_KEY', eas_key)
+            os.environ['EAS_API_KEY'] = eas_key
+            global EAS_API_KEY
+            EAS_API_KEY = eas_key
+            bypass_provider.set_api_key('eas-bypass', eas_key)
+            updated.append('EAS-X Bypass')
 
         if updated:
             await interaction.response.send_message(embed=discord.Embed(
                 title="✅ Configuration Updated",
                 description=
-                f"Successfully updated: {', '.join(updated)}\n\nChanges are applied immediately.",
+                f"Successfully updated: {', '.join(updated)}\n\nAll 4 APIs will be tried in order:\nAce → TRW → ZEN → EAS-X",
                 color=discord.Color.green()).set_footer(text="Bypass Bot"),
                                                     ephemeral=True)
         else:
