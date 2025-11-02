@@ -62,16 +62,44 @@ class BypassProvider:
                 if response.status == 200:
                     data = await response.json()
                     
-                    loadstring = data.get('loadstring') or data.get('script') or data.get('code')
-                    bypassed_url = data.get('destination') or data.get('result') or data.get('bypassed_url') or data.get('url')
-                    
-                    return {
-                        'success': True,
-                        'loadstring': loadstring,
-                        'bypassed_url': bypassed_url,
-                        'raw_data': data,
-                        'api_name': api_name
-                    }
+                    # Check for ZEN API response format
+                    if 'zen.gbrl.org' in api_url:
+                        # ZEN API returns {"status": "success", "result": "..."} or {"status": "success", "result": ["...","..."]}
+                        if data.get('status') == 'success':
+                            result_data = data.get('result')
+                            # If result is a list, get first item; if string, use it directly
+                            if isinstance(result_data, list) and len(result_data) > 0:
+                                loadstring = result_data[0] if isinstance(result_data[0], str) else None
+                                bypassed_url = result_data[1] if len(result_data) > 1 else None
+                            else:
+                                loadstring = result_data if isinstance(result_data, str) else None
+                                bypassed_url = None
+                            
+                            return {
+                                'success': True,
+                                'loadstring': loadstring,
+                                'bypassed_url': bypassed_url,
+                                'raw_data': data,
+                                'api_name': api_name
+                            }
+                        else:
+                            return {
+                                'success': False,
+                                'error': f'{api_name}: {data.get("message", "Unknown error")}',
+                                'api_name': api_name
+                            }
+                    else:
+                        # Standard format for Ace/TRW
+                        loadstring = data.get('loadstring') or data.get('script') or data.get('code')
+                        bypassed_url = data.get('destination') or data.get('result') or data.get('bypassed_url') or data.get('url')
+                        
+                        return {
+                            'success': True,
+                            'loadstring': loadstring,
+                            'bypassed_url': bypassed_url,
+                            'raw_data': data,
+                            'api_name': api_name
+                        }
                 else:
                     error_text = await response.text()
                     return {
