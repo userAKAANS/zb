@@ -731,7 +731,7 @@ class BypassModal(Modal):
                 'from_cache') else "✨ Fresh Result"
             
             api_used = result.get('api_name', 'Unknown')
-            api_info = f"🔧 **API Used:** {api_used}"
+            api_info = f"\n🔧 **API Used:** {api_used}" if api_used != 'Unknown' else ""
             
             is_work_ink = 'work.ink' in link_to_bypass.lower() or 'work-ink' in service_name.lower()
             work_ink_note = ""
@@ -867,7 +867,7 @@ class PanelBypassModal(Modal):
                 'from_cache') else "✨ Fresh Result"
             
             api_used = result.get('api_name', 'Unknown')
-            api_info = f"🔧 **API Used:** {api_used}"
+            api_info = f"\n🔧 **API Used:** {api_used}" if api_used != 'Unknown' else ""
             
             is_work_ink = 'work.ink' in link_to_bypass.lower() or 'work-ink' in service_name.lower()
             work_ink_note = ""
@@ -2120,7 +2120,7 @@ async def on_message(message: discord.Message):
                             'from_cache') else "✨ Fresh Result"
                         
                         api_used = result.get('api_name', 'Unknown')
-                        api_info = f"🔧 **API Used:** {api_used}"
+                        api_info = f"\n🔧 **API Used:** {api_used}" if api_used != 'Unknown' else ""
                         
                         is_work_ink = 'work.ink' in detected_link.lower() or 'work-ink' in service_name.lower()
                         work_ink_note = ""

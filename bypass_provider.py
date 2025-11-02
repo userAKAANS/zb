@@ -75,6 +75,14 @@ class BypassProvider:
                                 loadstring = result_data if isinstance(result_data, str) else None
                                 bypassed_url = None
                             
+                            # Check if we actually got content
+                            if not loadstring and not bypassed_url:
+                                return {
+                                    'success': False,
+                                    'error': f'{api_name}: No content returned from API',
+                                    'api_name': api_name
+                                }
+                            
                             return {
                                 'success': True,
                                 'loadstring': loadstring,
@@ -83,15 +91,44 @@ class BypassProvider:
                                 'api_name': api_name
                             }
                         else:
+                            error_msg = data.get('message') or data.get('error') or 'Unknown error'
+                            # Check if it's a "not supported" error
+                            if 'not supported' in error_msg.lower() or 'unsupported' in error_msg.lower():
+                                return {
+                                    'success': False,
+                                    'error': f'{api_name}: Link not supported by this service',
+                                    'api_name': api_name,
+                                    'unsupported': True
+                                }
                             return {
                                 'success': False,
-                                'error': f'{api_name}: {data.get("message", "Unknown error")}',
+                                'error': f'{api_name}: {error_msg}',
                                 'api_name': api_name
                             }
                     else:
                         # Standard format for Ace/TRW
                         loadstring = data.get('loadstring') or data.get('script') or data.get('code')
                         bypassed_url = data.get('destination') or data.get('result') or data.get('bypassed_url') or data.get('url')
+                        
+                        # Check if the API actually returned content
+                        if not loadstring and not bypassed_url:
+                            # Check for specific error messages
+                            error_msg = data.get('message') or data.get('error') or 'No content returned'
+                            
+                            # Check if it's a "not supported" error
+                            if 'not supported' in error_msg.lower() or 'unsupported' in error_msg.lower():
+                                return {
+                                    'success': False,
+                                    'error': f'{api_name}: Link not supported by this service',
+                                    'api_name': api_name,
+                                    'unsupported': True
+                                }
+                            else:
+                                return {
+                                    'success': False,
+                                    'error': f'{api_name}: {error_msg}',
+                                    'api_name': api_name
+                                }
                         
                         return {
                             'success': True,
