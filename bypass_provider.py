@@ -4,9 +4,10 @@ import os
 from typing import Optional, Dict
 
 class BypassProvider:
-    def __init__(self, bypass_api_key: Optional[str] = None, trw_api_key: Optional[str] = None):
+    def __init__(self, bypass_api_key: Optional[str] = None, trw_api_key: Optional[str] = None, zen_api_key: Optional[str] = None):
         self.bypass_api_key = bypass_api_key or os.getenv('BYPASS_API_KEY')
         self.trw_api_key = trw_api_key or os.getenv('TRW_API_KEY')
+        self.zen_api_key = zen_api_key or os.getenv('ZEN_API_KEY')
     
     async def bypass(self, link: str, session: aiohttp.ClientSession, timeout: int = 30) -> dict:
         encoded_link = quote(link)
@@ -30,7 +31,16 @@ class BypassProvider:
             else:
                 errors.append(f"TRW Bypass failed: {result.get('error', 'Unknown error')}")
         
-        # If we get here, both failed or no keys configured
+        # Fallback to ZEN API if TRW failed or wasn't available
+        if self.zen_api_key:
+            zen_url = f"https://zen.gbrl.org/v1/bypass?url={encoded_link}"
+            result = await self._try_api(zen_url, session, timeout, 'ZEN Bypass', api_key=self.zen_api_key)
+            if result['success']:
+                return result
+            else:
+                errors.append(f"ZEN Bypass failed: {result.get('error', 'Unknown error')}")
+        
+        # If we get here, all failed or no keys configured
         error_msg = ' | '.join(errors) if errors else 'No API keys configured for bypass services'
         return {
             'success': False,
@@ -38,10 +48,15 @@ class BypassProvider:
             'api_name': 'All providers failed'
         }
     
-    async def _try_api(self, api_url: str, session: aiohttp.ClientSession, timeout: int, api_name: str) -> dict:
+    async def _try_api(self, api_url: str, session: aiohttp.ClientSession, timeout: int, api_name: str, api_key: Optional[str] = None) -> dict:
         try:
+            headers = {}
+            if api_key and 'zen.gbrl.org' in api_url:
+                headers['Authorization'] = f'Bearer {api_key}'
+            
             async with session.get(
                 api_url,
+                headers=headers if headers else None,
                 timeout=aiohttp.ClientTimeout(total=timeout)
             ) as response:
                 if response.status == 200:
@@ -77,10 +92,12 @@ class BypassProvider:
             self.bypass_api_key = api_key
         elif provider == 'trw-lat':
             self.trw_api_key = api_key
+        elif provider == 'zen-bypass':
+            self.zen_api_key = api_key
     
     def get_api_status(self) -> dict:
         status = {
-            'active': 'Ace Bypass (with TRW fallback)',
+            'active': 'Multi-API (Ace → TRW → ZEN fallback)',
             'providers': {
                 'ace-bypass': {
                     'name': 'Ace Bypass',
@@ -95,6 +112,13 @@ class BypassProvider:
                     'requires_key': True,
                     'has_key': bool(self.trw_api_key),
                     'ready': bool(self.trw_api_key)
+                },
+                'zen-bypass': {
+                    'name': 'ZEN Bypass',
+                    'enabled': True,
+                    'requires_key': True,
+                    'has_key': bool(self.zen_api_key),
+                    'ready': bool(self.zen_api_key)
                 }
             }
         }

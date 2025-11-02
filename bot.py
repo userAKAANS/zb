@@ -27,6 +27,7 @@ load_dotenv()
 DISCORD_BOT_TOKEN = os.getenv('DISCORD_BOT_TOKEN')
 BYPASS_API_KEY = os.getenv('BYPASS_API_KEY')
 TRW_API_KEY = os.getenv('TRW_API_KEY')
+ZEN_API_KEY = os.getenv('ZEN_API_KEY')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 BOT_OWNER_ID = int(os.getenv('BOT_OWNER_ID', 0))
 
@@ -180,7 +181,7 @@ cache_manager = CacheManager(ttl_minutes=30)
 rate_limiter = RateLimiter(max_requests=10, time_window=60)
 hwid_service = HWIDService()
 user_activity = UserActivity()
-bypass_provider = BypassProvider(BYPASS_API_KEY, TRW_API_KEY)
+bypass_provider = BypassProvider(BYPASS_API_KEY, TRW_API_KEY, ZEN_API_KEY)
 
 SUPPORTED_SERVICES = [
     "codex", "trigon", "rekonise", "linkvertise", "paster-so", "cuttlinks",
@@ -194,7 +195,8 @@ SUPPORTED_SERVICES = [
     "shorteners-and-direct", "shorter.me", "socialwolvez.com", "sub2get.com",
     "sub2unlock.net", "sub4unlock.com", "subfinal", "t.co", "t.ly", "tiny.cc",
     "tinylink.onl", "tinyurl.com", "tpi.li", "unlocknow.net", "v.gd",
-    "work-ink", "ytsubme", "ace-bypass.com", "delta", "krnl", "platoboost"
+    "work-ink", "ytsubme", "ace-bypass.com", "delta", "krnl", "platoboost",
+    "linkify", "pastefy", "scriptpastebins", "admaven", "lootlabs", "link-unlock"
 ]
 
 SERVICE_EMOJIS = {
@@ -257,7 +259,13 @@ SERVICE_EMOJIS = {
     "v.gd": "🔗",
     "work-ink": "💼",
     "ytsubme": "📺",
-    "ace-bypass.com": "🎯"
+    "ace-bypass.com": "🎯",
+    "linkify": "🔗",
+    "pastefy": "📋",
+    "scriptpastebins": "📜",
+    "admaven": "📢",
+    "lootlabs": "🎁",
+    "link-unlock": "🔓"
 }
 
 SERVICE_STATUS_FILE = 'service_status.json'
@@ -1034,6 +1042,12 @@ class ConfigModal(Modal):
                                   style=discord.TextStyle.short,
                                   max_length=200)
 
+    zen_api_key_input = TextInput(label='ZEN API Key (if required)',
+                                  placeholder='Leave empty if not required',
+                                  required=False,
+                                  style=discord.TextStyle.short,
+                                  max_length=200)
+
     openai_api_key_input = TextInput(
         label='OpenAI API Key',
         placeholder='Enter your OpenAI API key (optional)',
@@ -1047,6 +1061,7 @@ class ConfigModal(Modal):
     async def on_submit(self, interaction: discord.Interaction):
         ace_key = self.ace_bypass_key_input.value.strip()
         trw_key = self.trw_api_key_input.value.strip()
+        zen_key = self.zen_api_key_input.value.strip()
         openai_key = self.openai_api_key_input.value.strip()
 
         env_file = '.env'
@@ -1067,6 +1082,14 @@ class ConfigModal(Modal):
             TRW_API_KEY = trw_key
             bypass_provider.set_api_key('trw-lat', trw_key)
             updated.append('TRW.lat API Key')
+
+        if zen_key:
+            set_key(env_file, 'ZEN_API_KEY', zen_key)
+            os.environ['ZEN_API_KEY'] = zen_key
+            global ZEN_API_KEY
+            ZEN_API_KEY = zen_key
+            bypass_provider.set_api_key('zen-bypass', zen_key)
+            updated.append('ZEN API Key')
 
         if openai_key:
             set_key(env_file, 'OPENAI_API_KEY', openai_key)

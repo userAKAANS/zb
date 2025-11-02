@@ -7,9 +7,9 @@ class UserRateLimiter:
     def __init__(self, rate_file='user_rates.json'):
         self.rate_file = rate_file
         self.user_data = self.load_data()
-        self.short_term_limit = 2
-        self.short_term_window = 300
-        self.daily_limit = 10
+        self.short_term_limit = 1
+        self.short_term_window = 15
+        self.daily_limit = 5
     
     def load_data(self) -> Dict:
         try:
