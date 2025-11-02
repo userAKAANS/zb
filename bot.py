@@ -2049,6 +2049,12 @@ async def on_message(message: discord.Message):
 
     if message.guild and message.guild.id in autobypass_channels:
         if message.channel.id == autobypass_channels[message.guild.id]:
+            # Delete the message instantly regardless of content
+            try:
+                await message.delete()
+            except:
+                pass
+            
             detected_link = detect_url(message.content)
 
             if detected_link:
@@ -2057,7 +2063,6 @@ async def on_message(message: discord.Message):
 
                 if contains_junkie(detected_link):
                     try:
-                        await message.delete()
                         await message.channel.send(embed=discord.Embed(
                             description=
                             f"🚫 {message.author.mention} - Junkie links are not supported anymore",
@@ -2079,7 +2084,6 @@ async def on_message(message: discord.Message):
                                                     result['type'])
 
                     try:
-                        await message.delete()
                         await message.channel.send(embed=discord.Embed(
                             description=
                             f"{service_emoji} {message.author.mention} - **{service_name.title()}** link bypassed! Check your DMs!",
@@ -2147,7 +2151,6 @@ async def on_message(message: discord.Message):
                 else:
                     if result.get('is_junkie'):
                         try:
-                            await message.delete()
                             await message.channel.send(embed=discord.Embed(
                                 description=
                                 f"🚫 {message.author.mention} - Junkie links are not supported anymore",
@@ -2158,6 +2161,12 @@ async def on_message(message: discord.Message):
                             pass
                     else:
                         try:
+                            await message.channel.send(embed=discord.Embed(
+                                description=
+                                f"❌ {message.author.mention} - Bypass failed. Check your DMs for details.",
+                                color=discord.Color.red()).set_footer(
+                                    text="Bypass Bot"),
+                                                       delete_after=15)
                             await message.author.send(embed=discord.Embed(
                                 title="❌ Auto-Bypass Failed",
                                 description=
@@ -2166,6 +2175,18 @@ async def on_message(message: discord.Message):
                                     text="Bypass Bot"))
                         except:
                             pass
+            else:
+                # No URL detected - just notify
+                try:
+                    await message.channel.send(embed=discord.Embed(
+                        description=
+                        f"⚠️ {message.author.mention} - No valid URL detected in your message.",
+                        color=discord.Color.orange()).set_footer(
+                            text="Bypass Bot"),
+                                               delete_after=10)
+                except:
+                    pass
+            return
 
 
 if __name__ == "__main__":
