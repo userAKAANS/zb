@@ -10,6 +10,7 @@ class BypassProvider:
     
     async def bypass(self, link: str, session: aiohttp.ClientSession, timeout: int = 30) -> dict:
         encoded_link = quote(link)
+        errors = []
         
         # Try Ace Bypass first if API key is available
         if self.bypass_api_key:
@@ -17,17 +18,24 @@ class BypassProvider:
             result = await self._try_api(ace_url, session, timeout, 'Ace Bypass')
             if result['success']:
                 return result
+            else:
+                errors.append(f"Ace Bypass failed: {result.get('error', 'Unknown error')}")
         
-        # Fallback to TRW Bypass
+        # Fallback to TRW Bypass if Ace failed or wasn't available
         if self.trw_api_key:
             trw_url = f"https://trw.lat/api/bypass?url={encoded_link}&apikey={self.trw_api_key}"
             result = await self._try_api(trw_url, session, timeout, 'TRW Bypass')
-            return result
+            if result['success']:
+                return result
+            else:
+                errors.append(f"TRW Bypass failed: {result.get('error', 'Unknown error')}")
         
+        # If we get here, both failed or no keys configured
+        error_msg = ' | '.join(errors) if errors else 'No API keys configured for bypass services'
         return {
             'success': False,
-            'error': 'No API keys configured for bypass services',
-            'api_name': 'None'
+            'error': error_msg,
+            'api_name': 'All providers failed'
         }
     
     async def _try_api(self, api_url: str, session: aiohttp.ClientSession, timeout: int, api_name: str) -> dict:
