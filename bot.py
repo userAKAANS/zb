@@ -1620,6 +1620,35 @@ async def status_command(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 
+@bot.tree.command(name="credits", description="View bot credits and attribution")
+async def credits_command(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🏆 Bypass Bot Credits",
+        description="Special thanks to everyone who made this bot possible!",
+        color=discord.Color.gold())
+    
+    embed.add_field(
+        name="👨‍💻 Developer",
+        value="**z0vl**",
+        inline=False)
+    
+    embed.add_field(
+        name="🔌 APIs & Services",
+        value="• **TRW** - TRW Bypass API\n• **Ace** - Ace Bypass API\n• **ZEN** - ZEN Bypass API\n• **EASX** - EASX Services",
+        inline=False)
+    
+    embed.add_field(
+        name="💙 Thank You",
+        value="Thanks for using Bypass Bot!",
+        inline=False)
+    
+    embed.set_footer(text="Bypass Bot • Made with ❤️")
+    if bot.user:
+        embed.set_thumbnail(url=bot.user.display_avatar.url)
+    
+    await interaction.response.send_message(embed=embed)
+
+
 @bot.tree.command(name="setstatus",
                   description="[OWNER] Change service status")
 @app_commands.describe(service="Service name to update",
