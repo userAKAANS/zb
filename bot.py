@@ -2245,16 +2245,28 @@ async def on_message(message: discord.Message):
 
 
 if __name__ == "__main__":
-    print("🚀 Starting Bypass Bot...")
-    print(f"📦 Loading configurations...")
-    print(f"⚡ Enhanced Features: Loaded")
-    print(
-        f"🔑 Bypass API Key: {'Set' if BYPASS_API_KEY else 'Not Set - Use /config to set'}"
-    )
+    print("=" * 60)
+    print("🚀 Starting Discord Bypass Bot")
+    print("=" * 60)
+    print()
+    print("📦 Configuration Status:")
+    print(f"   Discord Token:    {'✓ Set' if DISCORD_BOT_TOKEN else '✗ Missing'}")
+    print(f"   Bot Owner ID:     {'✓ Set' if BOT_OWNER_ID else '✗ Missing'}")
+    print()
+    print("🔑 API Keys Status:")
+    print(f"   Ace Bypass:       {'✓ Configured' if BYPASS_API_KEY else '○ Not Set'}")
+    print(f"   TRW Bypass:       {'✓ Configured' if TRW_API_KEY else '○ Not Set'}")
+    print(f"   ZEN Bypass:       {'✓ Configured' if ZEN_API_KEY else '○ Not Set'}")
+    print(f"   EAS-X Bypass:     {'✓ Configured' if EAS_API_KEY else '○ Not Set'}")
+    print(f"   OpenAI:           {'✓ Configured' if OPENAI_API_KEY else '○ Not Set'}")
+    print()
+    print("⚡ Fallback Chain: Ace → TRW → ZEN → EAS-X")
+    print("=" * 60)
+    print()
 
-    if not DISCORD_BOT_TOKEN:
-        print("❌ ERROR: DISCORD_BOT_TOKEN not found in environment variables!")
-        print("Please set DISCORD_BOT_TOKEN in your .env file")
+    if DISCORD_BOT_TOKEN:
+        bot.run(DISCORD_BOT_TOKEN)
+    else:
+        print("⚠️  Bot cannot start without DISCORD_BOT_TOKEN")
+        print("   Add your token via Secrets or .env file")
         exit(1)
-
-    bot.run(DISCORD_BOT_TOKEN)
