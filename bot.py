@@ -1063,6 +1063,8 @@ class ConfigModal(Modal):
         if trw_key:
             set_key(env_file, 'TRW_API_KEY', trw_key)
             os.environ['TRW_API_KEY'] = trw_key
+            global TRW_API_KEY
+            TRW_API_KEY = trw_key
             bypass_provider.set_api_key('trw-lat', trw_key)
             updated.append('TRW.lat API Key')
 
