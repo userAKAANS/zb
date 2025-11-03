@@ -692,8 +692,7 @@ class BypassModal(Modal):
             color=discord.Color.blue())
         loading_embed.set_footer(text="Bypass Bot • Hang tight!")
 
-        await interaction.response.send_message(embed=loading_embed,
-                                                ephemeral=True)
+        await interaction.response.send_message(embed=loading_embed)
 
         if contains_junkie(link_to_bypass):
             await interaction.edit_original_response(embed=discord.Embed(
@@ -760,7 +759,7 @@ class BypassModal(Modal):
                         f"```lua\n{preview}...\n```\n*Preview only. Full script is {len(loadstring)} characters.*",
                         inline=False)
 
-                embed.set_footer(text="Bypass Bot | Only you can see this")
+                embed.set_footer(text="Bypass Bot | Powered by: https://ace-bypass.com • trw.lat • eas-x.com")
 
                 view = CopyButtonView(loadstring, "Loadstring")
                 await interaction.edit_original_response(embed=embed,
@@ -772,7 +771,7 @@ class BypassModal(Modal):
                     description=
                     f"**Original Link:**\n`{link_to_bypass[:100]}`\n\n**Bypassed Link:**\n`{bypassed_url}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}\n{api_info}{work_ink_note}",
                     color=discord.Color.green())
-                embed.set_footer(text="Bypass Bot | Only you can see this")
+                embed.set_footer(text="Bypass Bot | Powered by: https://ace-bypass.com • trw.lat • eas-x.com")
 
                 view = CopyLinkView(bypassed_url)
                 await interaction.edit_original_response(embed=embed,
@@ -1634,7 +1633,7 @@ async def credits_command(interaction: discord.Interaction):
     
     embed.add_field(
         name="🔌 APIs & Services",
-        value="• **TRW** - TRW Bypass API\n• **Ace** - Ace Bypass API\n• **ZEN** - ZEN Bypass API\n• **EASX** - EASX Services",
+        value="• **Ace Bypass** - https://ace-bypass.com\n• **TRW Bypass** - trw.lat\n• **ZEN Bypass** - zen.gbrl.org\n• **EAS-X** - eas-x.com",
         inline=False)
     
     embed.add_field(
@@ -2138,71 +2137,56 @@ async def on_message(message: discord.Message):
                                                     result['time_taken'],
                                                     result['type'])
 
-                    try:
-                        await message.channel.send(embed=discord.Embed(
+                    cache_indicator = "⚡ From Cache" if result.get(
+                        'from_cache') else "✨ Fresh Result"
+                    
+                    api_used = result.get('api_name', 'Unknown')
+                    api_info = f"\n🔧 **API Used:** {api_used}" if api_used != 'Unknown' else ""
+                    
+                    is_work_ink = 'work.ink' in detected_link.lower() or 'work-ink' in service_name.lower()
+                    work_ink_note = ""
+                    if is_work_ink:
+                        work_ink_note = f"\n\n⚠️ **Work.ink Links:** Download the userscript at https://discord.com/channels/1407273561739100201/1434320055729917963\nThere is a tutorial available!"
+
+                    if result['type'] == 'loadstring':
+                        loadstring = result['result']
+                        embed = discord.Embed(
+                            title=
+                            f"{service_emoji} Auto-Bypass: {service_name.title()} Loadstring",
                             description=
-                            f"{service_emoji} {message.author.mention} - **{service_name.title()}** link bypassed! Check your DMs!",
-                            color=discord.Color.green()).set_footer(
-                                text="Bypass Bot • Auto-Bypass"),
-                                                   delete_after=10)
+                            f"{message.author.mention}\n**Original Link:**\n`{detected_link[:100]}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}\n{api_info}{work_ink_note}",
+                            color=discord.Color.green())
 
-                        cache_indicator = "⚡ From Cache" if result.get(
-                            'from_cache') else "✨ Fresh Result"
-                        
-                        api_used = result.get('api_name', 'Unknown')
-                        api_info = f"\n🔧 **API Used:** {api_used}" if api_used != 'Unknown' else ""
-                        
-                        is_work_ink = 'work.ink' in detected_link.lower() or 'work-ink' in service_name.lower()
-                        work_ink_note = ""
-                        if is_work_ink:
-                            work_ink_note = f"\n\n⚠️ **Work.ink Links:** Download the userscript at https://discord.com/channels/1407273561739100201/1434320055729917963\nThere is a tutorial available!"
+                        if len(loadstring) <= 500:
+                            embed.add_field(
+                                name="📋 Loadstring",
+                                value=f"```lua\n{loadstring}\n```",
+                                inline=False)
+                        else:
+                            preview = loadstring[:500]
+                            embed.add_field(
+                                name="📋 Loadstring Preview",
+                                value=
+                                f"```lua\n{preview}...\n```\n*Full script is {len(loadstring)} characters.*",
+                                inline=False)
 
-                        if result['type'] == 'loadstring':
-                            loadstring = result['result']
-                            embed = discord.Embed(
-                                title=
-                                f"{service_emoji} Auto-Bypass: {service_name.title()} Loadstring",
-                                description=
-                                f"**Original Link:**\n`{detected_link[:100]}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}\n{api_info}{work_ink_note}",
-                                color=discord.Color.green())
+                        embed.set_footer(text="Bypass Bot | Powered by: https://ace-bypass.com • trw.lat • eas-x.com")
+                        await message.channel.send(embed=embed)
 
-                            if len(loadstring) <= 500:
-                                embed.add_field(
-                                    name="📋 Loadstring",
-                                    value=f"```lua\n{loadstring}\n```",
-                                    inline=False)
-                            else:
-                                preview = loadstring[:500]
-                                embed.add_field(
-                                    name="📋 Loadstring Preview",
-                                    value=
-                                    f"```lua\n{preview}...\n```\n*Full script is {len(loadstring)} characters.*",
-                                    inline=False)
+                        if len(loadstring) > 500:
+                            await message.channel.send(
+                                f"```lua\n{loadstring}\n```")
 
-                            embed.set_footer(text="Bypass Bot | Auto-Bypass")
-                            await message.author.send(embed=embed)
-
-                            if len(loadstring) > 500:
-                                await message.author.send(
-                                    f"```lua\n{loadstring}\n```")
-
-                        elif result['type'] == 'url':
-                            bypassed_url = result['result']
-                            embed = discord.Embed(
-                                title=
-                                f"{service_emoji} Auto-Bypass: {service_name.title()} Link",
-                                description=
-                                f"**Original Link:**\n`{detected_link[:100]}`\n\n**Bypassed Link:**\n`{bypassed_url}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}\n{api_info}{work_ink_note}",
-                                color=discord.Color.green())
-                            embed.set_footer(text="Bypass Bot | Auto-Bypass")
-                            await message.author.send(embed=embed)
-                    except:
-                        await message.channel.send(embed=discord.Embed(
+                    elif result['type'] == 'url':
+                        bypassed_url = result['result']
+                        embed = discord.Embed(
+                            title=
+                            f"{service_emoji} Auto-Bypass: {service_name.title()} Link",
                             description=
-                            f"❌ {message.author.mention} - I couldn't DM you. Please enable DMs from server members.",
-                            color=discord.Color.red()).set_footer(
-                                text="Bypass Bot"),
-                                                   delete_after=15)
+                            f"{message.author.mention}\n**Original Link:**\n`{detected_link[:100]}`\n\n**Bypassed Link:**\n`{bypassed_url}`\n\n⏱️ **Time Taken:** {result['time_taken']}s\n{cache_indicator}\n{api_info}{work_ink_note}",
+                            color=discord.Color.green())
+                        embed.set_footer(text="Bypass Bot | Powered by: https://ace-bypass.com • trw.lat • eas-x.com")
+                        await message.channel.send(embed=embed)
                 else:
                     if result.get('is_junkie'):
                         try:
