@@ -4,7 +4,7 @@
 A Discord bot that bypasses link shorteners and script protection services with advanced rate limiting and auto-bypass functionality.
 
 ## Features
-- Link bypass for 60+ services including ZEN and EAS-X API support
+- Link bypass for 60+ services including Bypass VIP, ZEN and EAS-X API support
 - Configurable service preferences - enable/disable individual bypass services
 - Auto-bypass channels with automatic message cleanup
 - Rate limiting: 1 bypass per 15 seconds, 5 per day
@@ -12,14 +12,15 @@ A Discord bot that bypasses link shorteners and script protection services with 
 - Persistent channel settings across restarts
 - DM-based results for privacy
 - Server-side message cleanup
-- Multi-API fallback system (Ace → TRW → ZEN → EAS-X)
+- Multi-API fallback system (Bypass VIP → Ace → TRW → ZEN → EAS-X)
 
 ## Recent Changes (November 2025)
+- **NEW: Added Bypass VIP API support**: Bypass VIP bypass API added as premium first-priority fallback option
 - **NEW: Added EAS-X API support**: EAS-X bypass API added as fourth fallback option
 - **NEW: Fixed API authentication**: All APIs now use correct authentication methods (headers vs query params)
 - **NEW: Updated ZEN API**: Now uses x-api-key header instead of Bearer token
 - **NEW: Updated TRW API**: Now uses x-api-key header authentication
-- **Multi-API fallback**: System now tries Ace → TRW → ZEN → EAS-X automatically until one succeeds
+- **Multi-API fallback**: System now tries Bypass VIP → Ace → TRW → ZEN → EAS-X automatically until one succeeds
 - **Fixed API response validation**: APIs only return success if actual content is received
 - **Fixed "No result from API" error**: Improved response parsing for all providers
 - Added EAS-X API key configuration in `/config` command
@@ -34,7 +35,7 @@ A Discord bot that bypasses link shorteners and script protection services with 
 
 ## Architecture
 - `bot.py` - Main bot logic with commands and event handlers
-- `bypass_provider.py` - Multi-API bypass provider with automatic fallback (Ace → TRW → ZEN → EAS-X)
+- `bypass_provider.py` - Multi-API bypass provider with automatic fallback (Bypass VIP → Ace → TRW → ZEN → EAS-X)
   - Supports both GET and POST requests with proper header authentication
   - Validates API responses to ensure actual content is received
   - Handles "unsupported link" errors gracefully
@@ -51,15 +52,17 @@ Required secrets (add via Replit Secrets):
 - `BOT_OWNER_ID` - Your Discord user ID for owner notifications (required)
 
 Optional API keys for bypass services (at least one recommended):
+- `BYPASS_VIP_API_KEY` - API key for Bypass VIP service (premium, uses x-api-key header)
 - `BYPASS_API_KEY` - API key for Ace Bypass service (uses query parameter auth)
 - `TRW_API_KEY` - API key for TRW bypass service (uses x-api-key header)
 - `ZEN_API_KEY` - API key for ZEN bypass service (uses x-api-key header)
 - `EAS_API_KEY` - API key for EAS-X bypass service (uses eas-api-key header)
 - `OPENAI_API_KEY` - OpenAI API key for AI features (optional)
 
-**Note**: The bot tries all available APIs in order (Ace → TRW → ZEN → EAS-X) until one succeeds. You can also set API keys using the `/config` command.
+**Note**: The bot tries all available APIs in order (Bypass VIP → Ace → TRW → ZEN → EAS-X) until one succeeds. You can also set API keys using the `/config` command.
 
 ### API Authentication Methods
+- **Bypass VIP**: HTTP GET with `x-api-key` header (premium service, first priority)
 - **Ace**: HTTP GET with `?apikey=` query parameter
 - **TRW**: HTTP GET with `x-api-key` header
 - **ZEN**: HTTP GET with `x-api-key` header

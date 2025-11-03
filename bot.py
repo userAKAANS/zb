@@ -29,6 +29,7 @@ BYPASS_API_KEY = os.getenv('BYPASS_API_KEY')
 TRW_API_KEY = os.getenv('TRW_API_KEY')
 ZEN_API_KEY = os.getenv('ZEN_API_KEY')
 EAS_API_KEY = os.getenv('EAS_API_KEY')
+BYPASS_VIP_API_KEY = os.getenv('BYPASS_VIP_API_KEY')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 BOT_OWNER_ID = int(os.getenv('BOT_OWNER_ID', 0))
 
@@ -182,7 +183,7 @@ cache_manager = CacheManager(ttl_minutes=30)
 rate_limiter = RateLimiter(max_requests=10, time_window=60)
 hwid_service = HWIDService()
 user_activity = UserActivity()
-bypass_provider = BypassProvider(BYPASS_API_KEY, TRW_API_KEY, ZEN_API_KEY, EAS_API_KEY)
+bypass_provider = BypassProvider(BYPASS_API_KEY, TRW_API_KEY, ZEN_API_KEY, EAS_API_KEY, BYPASS_VIP_API_KEY)
 
 SUPPORTED_SERVICES = [
     "codex", "trigon", "rekonise", "linkvertise", "paster-so", "cuttlinks",
@@ -1055,6 +1056,13 @@ class ConfigModal(Modal):
         style=discord.TextStyle.short,
         max_length=200)
 
+    bypass_vip_key_input = TextInput(
+        label='Bypass VIP API Key',
+        placeholder='Enter your Bypass VIP API key',
+        required=False,
+        style=discord.TextStyle.short,
+        max_length=200)
+
     def __init__(self):
         super().__init__(title='⚙️ Configure Bypass API Keys')
 
@@ -1063,14 +1071,23 @@ class ConfigModal(Modal):
         trw_key = self.trw_api_key_input.value.strip()
         zen_key = self.zen_api_key_input.value.strip()
         eas_key = self.eas_api_key_input.value.strip()
+        bypass_vip_key = self.bypass_vip_key_input.value.strip()
 
         env_file = '.env'
         updated = []
 
+        if bypass_vip_key:
+            set_key(env_file, 'BYPASS_VIP_API_KEY', bypass_vip_key)
+            os.environ['BYPASS_VIP_API_KEY'] = bypass_vip_key
+            global BYPASS_VIP_API_KEY, bypass_provider
+            BYPASS_VIP_API_KEY = bypass_vip_key
+            bypass_provider.set_api_key('bypass-vip', bypass_vip_key)
+            updated.append('Bypass VIP')
+
         if ace_key:
             set_key(env_file, 'BYPASS_API_KEY', ace_key)
             os.environ['BYPASS_API_KEY'] = ace_key
-            global BYPASS_API_KEY, bypass_provider
+            global BYPASS_API_KEY
             BYPASS_API_KEY = ace_key
             bypass_provider.set_api_key('ace-bypass', ace_key)
             updated.append('Ace Bypass')
@@ -1103,7 +1120,7 @@ class ConfigModal(Modal):
             await interaction.response.send_message(embed=discord.Embed(
                 title="✅ Configuration Updated",
                 description=
-                f"Successfully updated: {', '.join(updated)}\n\nAll 4 APIs will be tried in order:\nAce → TRW → ZEN → EAS-X",
+                f"Successfully updated: {', '.join(updated)}\n\nAll 5 APIs will be tried in order:\nBypass VIP → Ace → TRW → ZEN → EAS-X",
                 color=discord.Color.green()).set_footer(text="Bypass Bot"),
                                                     ephemeral=True)
         else:
@@ -2238,13 +2255,14 @@ if __name__ == "__main__":
     print(f"   Bot Owner ID:     {'✓ Set' if BOT_OWNER_ID else '✗ Missing'}")
     print()
     print("🔑 API Keys Status:")
+    print(f"   Bypass VIP:       {'✓ Configured' if BYPASS_VIP_API_KEY else '○ Not Set'}")
     print(f"   Ace Bypass:       {'✓ Configured' if BYPASS_API_KEY else '○ Not Set'}")
     print(f"   TRW Bypass:       {'✓ Configured' if TRW_API_KEY else '○ Not Set'}")
     print(f"   ZEN Bypass:       {'✓ Configured' if ZEN_API_KEY else '○ Not Set'}")
     print(f"   EAS-X Bypass:     {'✓ Configured' if EAS_API_KEY else '○ Not Set'}")
     print(f"   OpenAI:           {'✓ Configured' if OPENAI_API_KEY else '○ Not Set'}")
     print()
-    print("⚡ Fallback Chain: Ace → TRW → ZEN → EAS-X")
+    print("⚡ Fallback Chain: Bypass VIP → Ace → TRW → ZEN → EAS-X")
     print("=" * 60)
     print()
 

@@ -4,17 +4,27 @@ import os
 from typing import Optional, Dict
 
 class BypassProvider:
-    def __init__(self, bypass_api_key: Optional[str] = None, trw_api_key: Optional[str] = None, zen_api_key: Optional[str] = None, eas_api_key: Optional[str] = None):
+    def __init__(self, bypass_api_key: Optional[str] = None, trw_api_key: Optional[str] = None, zen_api_key: Optional[str] = None, eas_api_key: Optional[str] = None, bypass_vip_api_key: Optional[str] = None):
         self.bypass_api_key = bypass_api_key or os.getenv('BYPASS_API_KEY')
         self.trw_api_key = trw_api_key or os.getenv('TRW_API_KEY')
         self.zen_api_key = zen_api_key or os.getenv('ZEN_API_KEY')
         self.eas_api_key = eas_api_key or os.getenv('EAS_API_KEY')
+        self.bypass_vip_api_key = bypass_vip_api_key or os.getenv('BYPASS_VIP_API_KEY')
     
     async def bypass(self, link: str, session: aiohttp.ClientSession, timeout: int = 30) -> dict:
         encoded_link = quote(link)
         errors = []
         
-        # Try Ace Bypass first if API key is available
+        # Try Bypass VIP first if API key is available (premium service)
+        if self.bypass_vip_api_key:
+            bypass_vip_url = f"https://api.bypass.vip/premium/bypass?url={encoded_link}"
+            result = await self._try_api_get(bypass_vip_url, session, timeout, 'Bypass VIP', headers={'x-api-key': self.bypass_vip_api_key})
+            if result['success']:
+                return result
+            else:
+                errors.append(f"Bypass VIP: {result.get('error', 'Unknown error')}")
+        
+        # Try Ace Bypass if Bypass VIP failed or wasn't available
         if self.bypass_api_key:
             ace_url = f"http://ace-bypass.com/api/bypass?url={encoded_link}&apikey={self.bypass_api_key}"
             result = await self._try_api_get(ace_url, session, timeout, 'Ace Bypass')
@@ -23,7 +33,7 @@ class BypassProvider:
             else:
                 errors.append(f"Ace Bypass: {result.get('error', 'Unknown error')}")
         
-        # Fallback to TRW Bypass if Ace failed or wasn't available
+        # Fallback to TRW Bypass if previous attempts failed or weren't available
         if self.trw_api_key:
             trw_url = f"https://trw.lat/api/bypass?url={encoded_link}"
             result = await self._try_api_get(trw_url, session, timeout, 'TRW Bypass', headers={'x-api-key': self.trw_api_key})
@@ -167,7 +177,9 @@ class BypassProvider:
     
     def set_api_key(self, provider: str, api_key: str):
         """Update API key for a specific provider"""
-        if provider == 'ace-bypass':
+        if provider == 'bypass-vip':
+            self.bypass_vip_api_key = api_key
+        elif provider == 'ace-bypass':
             self.bypass_api_key = api_key
         elif provider == 'trw-bypass':
             self.trw_api_key = api_key
@@ -178,8 +190,15 @@ class BypassProvider:
     
     def get_api_status(self) -> dict:
         status = {
-            'active': 'Multi-API (Ace → TRW → ZEN → EAS-X fallback)',
+            'active': 'Multi-API (Bypass VIP → Ace → TRW → ZEN → EAS-X fallback)',
             'providers': {
+                'bypass-vip': {
+                    'name': 'Bypass VIP',
+                    'enabled': True,
+                    'requires_key': True,
+                    'has_key': bool(self.bypass_vip_api_key),
+                    'ready': bool(self.bypass_vip_api_key)
+                },
                 'ace-bypass': {
                     'name': 'Ace Bypass',
                     'enabled': True,
